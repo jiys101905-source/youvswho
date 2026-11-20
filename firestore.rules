@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signed() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isAdmin() {
+      return signed() && exists(/databases/$(db)/documents/config/admins)
+        && me() in get(/databases/$(db)/documents/config/admins).data.uids;
+    }
+    // first signed-in user may claim admin once; afterwards only admins edit the list
+    match /config/admins {
+      allow read: if true;
+      allow create: if signed() && request.resource.data.uids == [me()];
+      allow update, delete: if isAdmin();
+    }
+    match /config/{d} { allow read: if true; allow write: if isAdmin(); }
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isAdmin() || (signed() && me() == uid
+        && request.resource.data.rating == 1500
+        && request.resource.data.pro == false
+        && !('defending' in request.resource.data) && !('bot' in request.resource.data));
+      // athletes may edit profile + subscriptions (demo payments) but never rating/results fields
+      allow update: if isAdmin() || (signed() && me() == uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rating','wins','losses','upsets','upsetStreak','weeksPlayed','defending','bot','lastPodMates','gender']));
+      allow delete: if isAdmin();
+    }
+    match /phones/{p} {
+      allow read: if signed();
+      allow create: if signed() && request.resource.data.uid == me();
+      allow update, delete: if isAdmin();
+    }
+    match /seasons/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /pods/{id}      { allow read: if true; allow write: if isAdmin(); }
+    match /results/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /standings/{id} { allow read: if true; allow write: if isAdmin(); }
+
+    match /entries/{id} {
+      allow read: if true;
+      allow create: if signed() && request.resource.data.uid == me() && id.matches('.*_' + me());
+      allow delete: if signed() && resource.data.uid == me() && !('podId' in resource.data);
+      allow update, delete: if isAdmin();
+    }
+    // scores stay private until the admin closes the week and publishes /results
+    match /subs/{id} {
+      allow read: if isAdmin() || (signed() && resource.data.uid == me());
+      allow create, update: if (signed() && request.resource.data.uid == me() && id.matches('.*_' + me())
+        && request.resource.data.verdict == 'pending') || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /challenges/{id} {
+      allow read: if true;
+      allow create: if signed() && request.resource.data.from == me() && id.matches('.*_' + me())
+        && request.resource.data.status == 'declared';
+      allow update, delete: if isAdmin();
+    }
+    match /reviews/{id} {
+      allow read: if isAdmin() || (signed() && resource.data.by == me());
+      allow create: if signed() && request.resource.data.by == me();
+      allow update, delete: if isAdmin();
+    }
+    match /feed/{id} {
+      allow read: if true;
+      allow create: if signed() && request.resource.data.uid == me() && request.resource.data.text.size() <= 500;
+      allow delete: if isAdmin() || (signed() && resource.data.uid == me());
+    }
+    match /predictions/{id} {
+      allow read: if true;
+      allow write: if signed() && request.resource.data.uid == me() && id.matches('.*_' + me());
+    }
+    match /boosts/{id} {
+      allow read: if true;
+      allow create: if signed() && request.resource.data.from == me() && request.resource.data.amount in [1000, 5000, 10000];
+      allow delete: if isAdmin();
+    }
+    match /hostApps/{id} { allow read: if isAdmin(); allow create: if signed(); }
+    match /boxSubs/{id}  { allow read: if true; allow write: if isAdmin(); }
+  }
+}

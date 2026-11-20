@@ -1,1 +1,40 @@
-<!doctype html><meta charset=utf-8><title>YOU vs WHO</title><p>building…
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>YOU vs WHO — CrossFit 1v1 Challenge</title>
+<meta name="description" content="언더독이 탑독에게 도전하는 크로스핏 1대1 챌린지. 매달 온라인 예선, 영상 본선, 오프라인 박스 결승.">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/"><b>YOU</b><i>vs</i><b>WHO</b></a>
+  <nav class="tabs" id="tabs">
+    <a href="#/" data-r="home">홈</a>
+    <a href="#/wod" data-r="wod">이번 주</a>
+    <a href="#/rank" data-r="rank">랭킹</a>
+    <a href="#/bracket" data-r="bracket">본선</a>
+    <a href="#/community" data-r="community">커뮤니티</a>
+    <a href="#/me" data-r="me">내 정보</a>
+  </nav>
+  <div class="who" id="who"></div>
+</header>
+<main id="view" class="view"></main>
+<nav class="bottom" id="bottom">
+  <a href="#/" data-r="home"><span>⌂</span>홈</a>
+  <a href="#/wod" data-r="wod"><span>◷</span>이번 주</a>
+  <a href="#/rank" data-r="rank"><span>≡</span>랭킹</a>
+  <a href="#/bracket" data-r="bracket"><span>⚔</span>본선</a>
+  <a href="#/me" data-r="me"><span>●</span>MY</a>
+</nav>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<script src="intro.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
