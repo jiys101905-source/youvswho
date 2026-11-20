@@ -75,11 +75,12 @@ function defaultSeason(id) {
   const first = new Date(y, m - 1, 1);
   const nextMonth = new Date(y, m, 1);
   let sat = new Date(nextMonth); while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
-  const d = (n) => { const x = new Date(first); x.setDate(1 + n); return x.toISOString().slice(0, 10); };
+  const ymd = (x) => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+  const d = (n) => { const x = new Date(first); x.setDate(1 + n); return ymd(x); };
   return {
     id, title: `${y}년 ${m}월 시리즈`, current: "W1",
     status: { W1: "reg", W2: "wait", R16: "wait", QF: "wait", FINAL: "wait" },
-    dates: { W1: d(0), W2: d(7), R16: d(14), QF: d(21), FINAL: sat.toISOString().slice(0, 10) },
+    dates: { W1: d(0), W2: d(7), R16: d(14), QF: d(21), FINAL: ymd(sat) },
     wods: {
       W1: { title: "WHO'S NEXT 1", scoring: "time", cap: 12, desc: "3 Rounds for time\n15 Cal Row\n12 Toes-to-bar\n9 Power clean 60/40kg\n\nTime cap 12:00 · 캡에 걸리면 남은 렙 수만큼 초가 더해집니다.", move: "cj" },
       W2: { title: "WHO'S NEXT 2", scoring: "reps", unit: "reps", cap: 10, desc: "10분 AMRAP\n5 Pull-ups\n10 Push-ups\n15 Air squats\n\n총 렙 수로 기록합니다.", move: "generic" },
@@ -204,6 +205,7 @@ window.addEventListener("hashchange", route);
 
 /* ---------------- HOME ---------------- */
 async function home() {
+  await loadMe();
   const s = S.season, cur = s.current, ci = stageIdx(cur);
   const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0, revenue: 0, boost: 0, sponsors: 0 }));
   const goal = Math.max(1000000, Math.ceil(P.pool / 1000000) * 1000000);
@@ -422,7 +424,7 @@ async function rank(arg) {
   <p class="muted">숫자는 두 개뿐이에요. <b>레이팅</b>은 통산 실력(매칭에만 사용), <b>예선 포인트</b>는 이번 시리즈 16강 진출 기준. 시상대는 대진 결과로만 정해져요.</p>
   <div class="grid g2">
     <div class="card"><h3>예선 포인트 · ${esc(S.season.title)} <span class="pill">${field}명</span></h3>
-      ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${Math.round(x.upsetScore || 0)}</td><td class="r">${top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
+      ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${Math.round(x.upsetScore || 0)}</td><td class="r">${!x.pro && (top14.has(x.uid) || wcs.has(x.uid)) ? `<span class="pill">Pro 필요</span>` : top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
       <p class="dim" style="font-size:12px">상위 ${RULE.qualifiers}명 + 와일드카드 ${RULE.wildcards}명(업셋 점수 합계 최상위, 전체 상위 ${RULE.wildcardPct * 100}% 이내). 16강은 선수 Pro 구독자만 출전.</p>
     </div>
     <div class="card"><h3>레이팅 (통산)</h3>
@@ -487,6 +489,7 @@ function predPoints(picks) {
 /* ---------------- ME ---------------- */
 async function mePage() {
   if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div><hr><button class="btn ghost" id="rp">▶ 인트로 다시 보기</button></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); $("#rp").onclick = () => window.YVWINTRO?.play({ force: true }); return; }
+  await loadMe(); renderWho();
   const m = S.me || {};
   if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = () => signOut(auth); return; }
   const boosts = await getDocs(query(collection(db, "boosts"), where("to", "==", S.user.uid)));
