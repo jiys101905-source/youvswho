@@ -5,8 +5,8 @@
    Replay: YVWINTRO.play({force:true}). */
 (function () {
   var KEY = "yvw_intro_seen_v3";
-  var VID = { hi: "assets/intro2_1080.mp4?v=202611212234", lo: "assets/intro2_720.mp4?v=202611212234" };
-  var DUR = 42.8;            // seconds of footage
+  var VID = { hi: "assets/intro2_1080.mp4?v=202611212257", lo: "assets/intro2_720.mp4?v=202611212257" };
+  var DUR = 45.0;            // seconds of footage
   var COLOR_AT = 5.0;        // workout starts (assault bike) -> colour blooms in
   var P_LOGO_OUT = [0.03, 0.11];  // logo dissolves while footage fades up
   var P_FILM = [0.07, 0.93];      // scroll range mapped onto footage
@@ -114,7 +114,7 @@
 
   function short() {
     var e = (performance.now() - t0) / 1000;
-    if (ready && video.paused && e > 0.6 && e < 2.6) { try { video.currentTime = 38.8; video.play(); } catch (x) { } }
+    if (ready && video.paused && e > 0.6 && e < 2.6) { try { video.currentTime = 41.0; video.play(); } catch (x) { } }
     var lo = 1 - ease(ramp(e, 0.7, 1.6));
     R.logo.style.opacity = Math.max(lo, ease(ramp(e, 2.2, 2.8)));
     video.style.opacity = ease(ramp(e, 0.8, 1.5)) * (1 - ramp(e, 2.4, 2.9));
