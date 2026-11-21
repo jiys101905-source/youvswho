@@ -5,7 +5,7 @@
    Replay: YVWINTRO.play({force:true}). */
 (function () {
   var KEY = "yvw_intro_seen_v3";
-  var VID = { hi: "assets/intro2_1080.mp4?v=202611212257", lo: "assets/intro2_720.mp4?v=202611212257" };
+  var VID = { hi: "assets/intro2_1080.mp4?v=202611220027", lo: "assets/intro2_720.mp4?v=202611220027" };
   var DUR = 45.0;            // seconds of footage
   var COLOR_AT = 5.0;        // workout starts (assault bike) -> colour blooms in
   var P_LOGO_OUT = [0.03, 0.11];  // logo dissolves while footage fades up
