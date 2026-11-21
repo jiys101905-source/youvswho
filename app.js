@@ -211,7 +211,7 @@ async function home() {
   const goal = Math.max(1000000, Math.ceil(P.pool / 1000000) * 1000000);
   view.innerHTML = `
   <section class="hero">
-    <video class="poster" src="assets/hero.mp4" autoplay muted loop playsinline poster="assets/kf/A2_s.jpg"></video>
+    <video class="poster" src="assets/hero.mp4" autoplay muted loop playsinline poster="assets/kf3/b_entr.jpg"></video>
     <div class="in">
       <div class="kicker">${esc(s.title)} · ${esc(LEVEL[cur])}</div>
       <h1>UNDERDOGS<br>CHALLENGE <em>TOP DOGS</em></h1>
