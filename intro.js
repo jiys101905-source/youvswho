@@ -5,12 +5,12 @@
    Replay: YVWINTRO.play({force:true}). */
 (function () {
   var KEY = "yvw_intro_seen_v3";
-  var VID = { hi: "assets/intro2_1080.mp4?v=202611211914", lo: "assets/intro2_720.mp4?v=202611211914" };
-  var DUR = 38.8;            // seconds of footage
+  var VID = { hi: "assets/intro2_1080.mp4?v=202611212234", lo: "assets/intro2_720.mp4?v=202611212234" };
+  var DUR = 42.8;            // seconds of footage
   var COLOR_AT = 5.0;        // workout starts (assault bike) -> colour blooms in
   var P_LOGO_OUT = [0.03, 0.11];  // logo dissolves while footage fades up
   var P_FILM = [0.07, 0.93];      // scroll range mapped onto footage
-  var P_LOGO_IN = [0.90, 0.97];   // logo returns over the high five
+  var P_LOGO_IN = [0.90, 0.97];   // logo rises from the point-at-camera shot
 
   var css = "\
 #yvi{position:fixed;inset:0;z-index:9999;background:#000;color:#fff;overflow:hidden;font-family:'Noto Sans KR',system-ui,sans-serif}\
@@ -114,7 +114,7 @@
 
   function short() {
     var e = (performance.now() - t0) / 1000;
-    if (ready && video.paused && e > 0.6 && e < 2.6) { try { video.currentTime = 23.0; video.play(); } catch (x) { } }
+    if (ready && video.paused && e > 0.6 && e < 2.6) { try { video.currentTime = 38.8; video.play(); } catch (x) { } }
     var lo = 1 - ease(ramp(e, 0.7, 1.6));
     R.logo.style.opacity = Math.max(lo, ease(ramp(e, 2.2, 2.8)));
     video.style.opacity = ease(ramp(e, 0.8, 1.5)) * (1 - ramp(e, 2.4, 2.9));
