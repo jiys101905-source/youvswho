@@ -157,7 +157,9 @@ function authModal(mode = "login") {
 /* ---------------- data loaders ---------------- */
 async function loadSeason() {
   const cfg = await getDoc(doc(db, "config", "app"));
-  const id = cfg.exists() && cfg.data().currentSeason ? cfg.data().currentSeason : monthId();
+  // 시즌이 아직 없으면: 매달 1주차(1~7일)는 이번 달, 그 이후엔 다음 달 시리즈를 접수 중으로 보여 줘요.
+  const now = new Date(), upcoming = now.getDate() <= 7 ? now : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const id = cfg.exists() && cfg.data().currentSeason ? cfg.data().currentSeason : monthId(upcoming);
   S.seasonId = id;
   const sd = await getDoc(doc(db, "seasons", id));
   S.season = sd.exists() ? sd.data() : { ...defaultSeason(id), _virtual: true };
