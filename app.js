@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js";
+import { AIJudge } from "./aijudge.js?v=202611211302";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
