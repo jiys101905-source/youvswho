@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221150";
+import { AIJudge } from "./aijudge.js?v=202611221200";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -102,6 +102,8 @@ const fmtTime = (sec) => { sec = Math.round(sec); return String(Math.floor(sec /
 const ytId = (u) => { const m = String(u || "").match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/); return m ? m[1] : null; };
 const stageIdx = (k) => STAGES.findIndex((s) => s.key === k);
 const needLogin = () => { if (S.user) return false; authModal("login"); return true; };
+// a doc the rules hide while it does not exist yet reads as null instead of failing the page
+async function safeData(ref) { try { const d = await getDoc(ref); return d.exists() ? d.data() : null; } catch (e) { if (e.code === "permission-denied") return null; throw e; } }
 async function guard(fn) { try { return await fn(); } catch (e) { console.error(e); toast("오류: " + (e.code || e.message)); } }
 function scoreText(sub, wod) {
   if (!sub || sub.sortKey == null) return "—";
@@ -353,12 +355,10 @@ async function wod() {
   const stKey = S.seasonId + "_" + cur;
   let entry = null, pod = null, sub = null, ch = null, res = null;
   if (S.user) {
-    entry = (await getDoc(doc(db, "entries", stKey + "_" + S.user.uid))).data() || null;
-    sub = (await getDoc(doc(db, "subs", stKey + "_" + S.user.uid))).data() || null;
-    ch = (await getDoc(doc(db, "challenges", stKey + "_" + S.user.uid))).data() || null;
-    if (entry?.podId) { const p = await getDoc(doc(db, "pods", entry.podId)); pod = p.exists() ? { id: p.id, ...p.data() } : null; }
+    [entry, sub, ch] = await Promise.all(["entries", "subs", "challenges"].map((c) => safeData(doc(db, c, stKey + "_" + S.user.uid))));
+    if (entry?.podId) { const p = await safeData(doc(db, "pods", entry.podId)); pod = p ? { id: entry.podId, ...p } : null; }
   }
-  const rd = await getDoc(doc(db, "results", stKey)); res = rd.exists() ? rd.data() : null;
+  res = await safeData(doc(db, "results", stKey));
   const statusLabel = { reg: "참가 접수 중 (일요일 마감)", live: "진행 중 · 기록 제출 가능", closed: "마감 · 결과 공개", wait: "준비 중" }[status] || status;
   const code = dailyCode();
   const T = sched(S.seasonId), now = new Date();
@@ -467,8 +467,8 @@ async function challengeModal(stKey) {
   <button class="btn ghost block" style="margin-top:12px" onclick="closeModal()">닫기</button>`);
   document.querySelectorAll("[data-u]").forEach((b) => (b.onclick = () => guard(async () => {
     const u = ok.find((x) => x.id === b.dataset.u);
-    const sub = await getDoc(doc(db, "subs", stKey + "_" + S.user.uid));
-    if (sub.exists()) return toast("기록 제출 후에는 도전할 수 없어요");
+    const sub = await safeData(doc(db, "subs", stKey + "_" + S.user.uid));
+    if (sub) return toast("기록 제출 후에는 도전할 수 없어요");
     await setDoc(doc(db, "challenges", stKey + "_" + S.user.uid), { from: S.user.uid, fromName: me.name, fromRating: me.rating, to: u.id, toName: u.name, toRating: u.rating, stage: stKey, gender: me.gender, status: "declared", at: serverTimestamp() });
     closeModal(); toast(u.name + "에게 도전장을 보냈어요!"); route();
   })));
