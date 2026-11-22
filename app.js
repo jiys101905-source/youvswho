@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221218";
+import { AIJudge } from "./aijudge.js?v=202611221219";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -602,7 +602,7 @@ async function mePage(arg) {
   if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div><div class="sec"><h2>더 보기</h2></div><div class="grid g2"><a class="card" href="#/community"><h3>커뮤니티</h3></a><a class="card" href="#/about"><h3>About</h3></a></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
   await loadMe(); renderWho();
   const m = S.me || {};
-  if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = () => signOut(auth); return; }
+  if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = logout; return; }
   const boosts = await getDocs(query(collection(db, "boosts"), where("to", "==", S.user.uid)));
   let bsum = 0; boosts.forEach((d) => (bsum += d.data().amount || 0));
   view.innerHTML = `
@@ -620,7 +620,7 @@ async function mePage(arg) {
   <form class="card" id="pfm"><div class="grid g2"><div><label>선수 이름</label><input name="name" value="${esc(m.name)}" maxlength="20"></div><div><label>소속 박스</label><input name="box" value="${esc(m.box || "")}" maxlength="30"></div></div><button class="btn ghost" style="margin-top:12px">저장</button></form>
 
   <div class="row wrap" style="margin-top:24px">${!S.adminsExist && arg === "admin" ? `<button class="btn ghost" id="claim">관리자 등록</button>` : ""}<span class="sp"></span><button class="btn ghost" id="lo">로그아웃</button></div>`;
-  $("#lo").onclick = () => signOut(auth);
+  $("#lo").onclick = logout;
   const cl = $("#claim"); if (cl) cl.onclick = () => guard(async () => { await setDoc(doc(db, "config", "admins"), { uids: [S.user.uid], at: serverTimestamp() }); toast("관리자로 등록됐어요"); await loadMe(); renderWho(); route(); });
   $("#pfm").onsubmit = (e) => { e.preventDefault(); guard(async () => { await updateDoc(doc(db, "users", S.user.uid), { name: e.target.name.value.trim(), box: e.target.box.value.trim() }); await loadMe(); toast("저장했어요"); route(); }); };
   document.querySelectorAll("[data-sub]").forEach((b) => (b.onclick = () => payModal(b.dataset.sub)));
@@ -948,6 +948,14 @@ async function seedSubs(stKey) {
 async function wipeDemo() {
   const qs = await getDocs(query(collection(db, "users"), where("bot", "==", true)));
   const batch = writeBatch(db); qs.forEach((d) => batch.delete(d.ref)); await batch.commit(); toast(`가상 선수 ${qs.size}명 삭제`); route();
+}
+
+/* ---------------- logout: back to the intro ---------------- */
+async function logout() {
+  await signOut(auth);
+  location.hash = "#/";
+  window.scrollTo(0, 0);
+  window.YVWINTRO && window.YVWINTRO.play({ force: true });
 }
 
 /* ---------------- top ticker ---------------- */
