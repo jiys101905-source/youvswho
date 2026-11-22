@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221206";
+import { AIJudge } from "./aijudge.js?v=202611221215";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -35,10 +35,10 @@ const STAGES = [
 ];
 // 4 weeks: W1, W2, week 3 = 16강 + 8강, week 4 weekend = THE FINAL
 const WEEKS = [
-  { n: 1, name: "WHO'S NEXT 1", keys: ["W1"], img: "assets/kf3/n_bike.jpg" },
-  { n: 2, name: "WHO'S NEXT 2", keys: ["W2"], img: "assets/kf3/n_mu1.jpg" },
-  { n: 3, name: "16강 · 8강", keys: ["R16", "QF"], img: "assets/kf3/g_sne.jpg" },
-  { n: 4, name: "THE FINAL", keys: ["FINAL"], img: "assets/kf3/n_shake.jpg" },
+  { n: 1, name: "WHO'S NEXT 1", ko: "온라인 예선 1", keys: ["W1"], img: "assets/kf3/n_bike.jpg" },
+  { n: 2, name: "WHO'S NEXT 2", ko: "온라인 예선 2", keys: ["W2"], img: "assets/kf3/n_mu1.jpg" },
+  { n: 3, name: "Top 16 · Top 8", ko: "16강 · 8강", keys: ["R16", "QF"], img: "assets/kf3/g_sne.jpg" },
+  { n: 4, name: "THE FINAL", ko: "결승", keys: ["FINAL"], img: "assets/kf3/n_shake.jpg" },
 ];
 // release (WOD 공개) and close (마감) times for a series "YYYY-MM"
 function sched(id) {
@@ -326,7 +326,7 @@ async function home() {
 /* ---------------- ABOUT ---------------- */
 async function about() {
   view.innerHTML = `
-  <h1 class="pagehead">About</h1>
+  <div class="ph"><h1 class="pagehead">About</h1><span class="ph-ko">YOU vs WHO 소개</span></div>
   <div class="about">
     <section><h2>YOU vs WHO</h2><p>언더독이 탑독에게 도전하는 크로스핏 1대1 챌린지예요. 매달 한 시리즈가 열리고, 누구든 예선부터 시작해 결승 무대까지 올라갈 수 있어요.</p></section>
     <section><h2>한 달, 네 주</h2>
@@ -387,13 +387,13 @@ async function wod() {
   const lbl = { soon: "예정", live: "진행 중", done: "종료" };
   view.innerHTML = `
   <section class="sch-top">
-    <div><span class="sch-k">${esc(s.title)}</span><h1 class="pagehead">일정</h1></div>
+    <div class="ph"><h1 class="pagehead">Schedule</h1><span class="ph-ko">일정 · ${esc(s.title)}</span></div>
     ${ne ? `<div class="sch-next"><span>${esc(ne[1])}</span><b data-cd="${+ne[0]}">${cdText(ne[0])}</b></div>` : ""}
   </section>
   <ol class="sch-bar">${WEEKS.map((wk) => { const st = stateOf(wk.keys[wk.keys.length - 1]), st0 = stateOf(wk.keys[0]); const cls = st0 === "soon" ? "soon" : st === "done" ? "done" : "live"; return `<li class="${cls}"><a href="#wk${wk.n}"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><b>${wk.name}</b><em>${lbl[cls]}</em></a></li>`; }).join("")}</ol>
   ${WEEKS.map((wk) => `
   <section class="wk" id="wk${wk.n}">
-    <div class="wk-hero"><img src="${wk.img}" alt=""><div class="in"><span>${String(wk.n).padStart(2, "0")} · ${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><h2>${wk.name}</h2></div></div>
+    <div class="wk-hero"><img src="${wk.img}" alt=""><div class="in"><span>${String(wk.n).padStart(2, "0")} · ${wk.n}주차${wk.n === 4 ? " 주말" : ""} · ${wk.ko}</span><h2>${wk.name}</h2></div></div>
     ${wk.keys.map((k) => `
     <div class="wk-body">
       <div class="wk-info">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>` : `<h3>세부 일정<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>`}${dl(k)}</div>
@@ -534,7 +534,7 @@ async function rank(arg) {
   const wc = st.filter((x) => !top14.has(x.uid) && x.pctAvg >= 1 - RULE.wildcardPct).sort((a, b) => b.upsetScore - a.upsetScore).slice(0, RULE.wildcards);
   const wcs = new Set(wc.map((x) => x.uid));
   view.innerHTML = `
-  <div class="row wrap"><h1 class="pagehead">랭킹</h1><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/rank/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/rank/F'">여자</button></div></div>
+  <div class="row wrap"><div class="ph"><h1 class="pagehead">Ranking</h1><span class="ph-ko">랭킹</span></div><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/rank/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/rank/F'">여자</button></div></div>
   <div class="grid g2">
     <div class="card"><h3>예선 포인트 · ${esc(S.season.title)} <span class="pill">${field}명</span></h3>
       ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${Math.round(x.upsetScore || 0)}</td><td class="r">${!x.pro && (top14.has(x.uid) || wcs.has(x.uid)) ? `<span class="pill">Pro 필요</span>` : top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
@@ -554,13 +554,13 @@ async function bracket(arg) {
   const nm = (u) => (u ? `<span class="seed">${seeds[u] || ""}</span>${esc(names[u] || "—")}` : `<span class="dim">미정</span>`);
   const mt = (m) => `<div class="mt"><div class="${m[2] ? (m[2] === m[0] ? "w" : "l") : ""}"><span>${nm(m[0])}</span></div><div class="${m[2] ? (m[2] === m[1] ? "w" : "l") : ""}"><span>${nm(m[1])}</span></div></div>`;
   const col = (k, n, label) => `<div class="col"><h4>${label}</h4>${(b[k] || Array.from({ length: n }, () => [null, null, null])).map(mt).join("")}</div>`;
-  const preds = S.user ? (await getDoc(doc(db, "predictions", S.seasonId + "_" + S.user.uid))).data() || { picks: {} } : { picks: {} };
+  const preds = (S.user && (await safeData(doc(db, "predictions", S.seasonId + "_" + S.user.uid)))) || { picks: {} };
   view.innerHTML = `
-  <div class="row wrap"><h1 class="disp" style="font-size:38px">본선</h1><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/bracket/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/bracket/F'">여자</button></div></div>
-  <div class="card" style="overflow-x:auto"><div class="bk">${col("R16", 8, "16강 · 영상")}${col("QF", 4, "8강 · 영상")}${col("SF", 2, "4강 · 박스")}<div class="col"><h4>결승 · 3·4위전</h4>${(b.F || [[null, null, null]]).map(mt).join("")}${(b.P3 || [[null, null, null]]).map(mt).join("")}</div></div></div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>THE FINAL</h3><p style="font-size:20px;font-weight:900;margin:0">${esc(S.season.final.box)}</p><p class="muted">${esc(S.season.dates.FINAL)} ${esc(S.season.final.time)} ${esc(S.season.final.addr || "")}</p><p class="muted">${esc(S.season.final.note)}</p>${S.season.final.stream ? `<a class="btn red" href="${esc(S.season.final.stream)}" target="_blank" rel="noopener">무료 라이브</a>` : ""}</div>
-    <div class="card"><h3>예측 리그 <span class="pill gold">포인트 전용 · 스폰서 경품</span></h3><p class="muted" style="margin-top:0">경기마다 이길 선수를 고르세요. 맞히면 10점, 낮은 시드가 이기는 업셋을 맞히면 +5점. 실제 돈은 걸지 않아요.</p><div id="predBox"></div></div>
+  <div class="row wrap"><div class="ph"><h1 class="pagehead">Bracket</h1><span class="ph-ko">본선 대진</span></div><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/bracket/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/bracket/F'">여자</button></div></div>
+  <div class="card bkwrap"><div class="bk">${col("R16", 8, "16강")}${col("QF", 4, "8강")}${col("SF", 2, "준결승")}<div class="col"><h4>결승 · 3·4위전</h4>${(b.F || [[null, null, null]]).map(mt).join("")}${(b.P3 || [[null, null, null]]).map(mt).join("")}</div></div></div>
+  <div class="grid g2" style="margin-top:8px">
+    <div class="card"><h3>THE FINAL</h3><p style="font-size:24px;font-weight:500;margin:0">${esc(S.season.final.box)}</p><p class="muted" style="font-weight:500">준결승 ${mdw(sched(S.seasonId).FINAL.sat)} ${esc(S.season.final.time)} · 결승 ${mdw(sched(S.seasonId).FINAL.sun)} 13:00</p><p class="muted">${esc(S.season.final.addr || "")}</p>${S.season.final.stream ? `<a class="btn red" href="${esc(S.season.final.stream)}" target="_blank" rel="noopener">무료 라이브</a>` : ""}</div>
+    <div class="card"><h3>예측 리그 <span class="pill">포인트 전용</span></h3><div id="predBox"></div></div>
   </div>`;
   // predictions on open matches
   const open = [];
@@ -573,10 +573,10 @@ async function bracket(arg) {
 /* ---------------- COMMUNITY ---------------- */
 async function community() {
   view.innerHTML = `
-  <h1 class="disp" style="font-size:38px">커뮤니티</h1>
-  <div class="grid g2" style="margin-top:12px">
+  <div class="ph"><h1 class="pagehead">Community</h1><span class="ph-ko">커뮤니티</span></div>
+  <div class="grid g2">
     <div class="card"><h3>피드</h3>
-      ${S.user ? `<form id="pf"><textarea name="t" rows="3" maxlength="500" placeholder="이번 주 WOD 후기, 도전 선언, 박스 소식…" required></textarea><div class="row" style="margin-top:8px"><span class="dim" style="font-size:12px">욕설·비방은 관리자가 삭제해요</span><span class="sp"></span><button class="btn red sm">올리기</button></div></form>` : `<p class="muted">로그인하면 글을 쓸 수 있어요.</p>`}
+      ${S.user ? `<form id="pf"><textarea name="t" rows="3" maxlength="500" placeholder="이번 주 WOD 후기, 도전 선언, 박스 소식…" required></textarea><div class="row" style="margin-top:8px"><span class="sp"></span><button class="btn red sm">올리기</button></div></form>` : `<p class="muted">로그인하면 글을 쓸 수 있어요.</p>`}
       <div id="feed"></div></div>
     <div class="card"><h3>예측 리그 순위</h3><div id="plb"></div></div>
   </div>`;
@@ -599,7 +599,7 @@ function predPoints(picks) {
 
 /* ---------------- ME ---------------- */
 async function mePage(arg) {
-  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
+  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div><div class="sec"><h2>더 보기</h2></div><div class="grid g2"><a class="card" href="#/community"><h3>커뮤니티</h3></a><a class="card" href="#/about"><h3>About</h3></a></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
   await loadMe(); renderWho();
   const m = S.me || {};
   if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = () => signOut(auth); return; }
@@ -958,9 +958,9 @@ async function startTicker() {
   const T = sched(S.seasonId);
   const items = () => {
     const ne = nextEvent(S.seasonId), out = [];
-    out.push(`${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`);
+    if (P.users > 0) out.push(`${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`);
     if (ne) out.push(`${esc(ne[1])} <b>${cdText(ne[0])}</b>`);
-    out.push(`현재 상금 <b>${won(P.pool)}</b>`);
+    if (P.pool > 0) out.push(`현재 상금 <b>${won(P.pool)}</b>`);
     out.push(`THE FINAL <b>${mdw(T.FINAL.sat)}</b>`);
     return out;
   };
