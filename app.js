@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221201";
+import { AIJudge } from "./aijudge.js?v=202611221206";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -362,24 +362,44 @@ async function wod() {
   const statusLabel = { reg: "참가 접수 중 (일요일 마감)", live: "진행 중 · 기록 제출 가능", closed: "마감 · 결과 공개", wait: "준비 중" }[status] || status;
   const code = dailyCode();
   const T = sched(S.seasonId), now = new Date();
-  const wodBlock = (k) => {
-    const ww = s.wods[k] || {}, t = T[k];
-    if (now < t.open) return `<div class="locked"><span>WOD 공개까지</span><b data-cd="${+t.open}">${cdText(t.open)}</b><span>${mdw(t.open)} ${hm(t.open)} 공개</span></div>`;
-    return `<pre class="wodtxt">${esc(ww.desc || "")}</pre>`;
+  const res12 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 12);   // 결과 발표: 마감 다음 날 12:00
+  const INFO = {
+    W1: { fmt: "온라인 예선 · 4인 포드", who: "누구나 · 무료", rec: "영상 제출 + 기록 입력", next: "2주 합산 예선 포인트로 16강 결정" },
+    W2: { fmt: "온라인 예선 · 4인 포드", who: "누구나 · 무료", rec: "영상 제출 + 기록 입력", next: "상위 14명 + 와일드카드 2명 → 16강" },
+    R16: { fmt: "1대1 영상 대결", who: "16명 · 선수 Pro", rec: "영상 제출 · AI 판정 + 상대 검토", next: "승자 8명 → 8강" },
+    QF: { fmt: "1대1 영상 대결", who: "8명 · 선수 Pro", rec: "영상 제출 · AI 판정 + 상대 검토", next: "승자 4명 → THE FINAL" },
+    FINAL: { fmt: "오프라인 1대1 · 박스", who: "4명", rec: "현장 심판 · 라이브 중계", next: "우승 · 준우승 · 3위 · 4위" },
   };
-  const when = (k) => { const t = T[k]; const row = (a, b) => `<div><dt>${a}</dt><dd>${b}</dd></div>`;
+  const row = (a, b) => `<div><dt>${a}</dt><dd>${b}</dd></div>`;
+  const dl = (k) => { const t = T[k], I = INFO[k], ww = s.wods[k] || {};
+    const score = ww.scoring === "time" ? "시간 (빠를수록 좋음)" : "렙 수 (많을수록 좋음)";
     return `<dl class="wk-dl">${k === "FINAL"
-      ? row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("결승", `${mdw(t.sat)} – ${mdw(t.sun)}`) + row("장소", esc(s.final.box))
-      : row("기간", `${md(t.open)} – ${md(t.close)}`) + row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("마감", `${mdw(t.close)} ${hm(t.close)}`)}</dl>`; };
+      ? row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("준결승", `${mdw(t.sat)} ${esc(s.final.time)}`) + row("3·4위전 · 결승", `${mdw(t.sun)} 13:00`) + row("장소", esc(s.final.box)) + row("방식", I.fmt) + row("출전", I.who) + row("판정", I.rec) + row("시상", I.next)
+      : row("기간", `${mdw(t.open)} – ${mdw(t.close)}`) + row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("기록 마감", `${mdw(t.close)} ${hm(t.close)}`) + row("결과 발표", `${mdw(res12(t.close))} 12:00`) + row("방식", I.fmt) + row("출전", I.who) + row("기록", `${score} · 타임캡 ${ww.cap}분`) + row("제출", I.rec) + row("다음 단계", I.next)}</dl>`; };
+  const stateOf = (k) => { const t = T[k], end = t.close || t.sun; return now < t.open ? "soon" : now <= end ? "live" : "done"; };
+  const panel = (k) => {
+    const t = T[k], st = stateOf(k), ww = s.wods[k] || {};
+    if (st === "soon") return `<div class="wk-cd"><span>WOD 공개까지</span><b data-cd="${+t.open}">${cdText(t.open)}</b><span>${mdw(t.open)} ${hm(t.open)}</span></div><div class="wk-lock">WOD는 공개 시각에 이곳에 열려요</div>`;
+    if (st === "live") return `<div class="wk-cd live"><span>${k === "FINAL" ? "THE FINAL까지" : "기록 마감까지"}</span><b data-cd="${+(t.close || t.day)}">${cdText(t.close || t.day)}</b></div><pre class="wodtxt big">${esc(ww.desc || "")}</pre>`;
+    return `<div class="wk-cd done"><span>종료</span><b>결과 발표 완료</b></div><pre class="wodtxt big">${esc(ww.desc || "")}</pre>`;
+  };
+  const ne = nextEvent(S.seasonId);
+  const lbl = { soon: "예정", live: "진행 중", done: "종료" };
   view.innerHTML = `
-  <h1 class="pagehead">일정</h1>
-  <p class="subhead">${esc(s.title)}</p>
-  <div class="weeks">${WEEKS.map((wk) => `
-    <section class="week ${wk.keys.includes(cur) ? "now" : ""}">
-      <div class="wk-h"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><h2>${wk.name}</h2></div>
-      ${wk.keys.map((k) => `<div class="wk-ev">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}</h3>` : ""}${when(k)}${wodBlock(k)}</div>`).join("")}
-    </section>`).join("")}
-  </div>
+  <section class="sch-top">
+    <div><span class="sch-k">${esc(s.title)}</span><h1 class="pagehead">일정</h1></div>
+    ${ne ? `<div class="sch-next"><span>${esc(ne[1])}</span><b data-cd="${+ne[0]}">${cdText(ne[0])}</b></div>` : ""}
+  </section>
+  <ol class="sch-bar">${WEEKS.map((wk) => { const st = stateOf(wk.keys[wk.keys.length - 1]), st0 = stateOf(wk.keys[0]); const cls = st0 === "soon" ? "soon" : st === "done" ? "done" : "live"; return `<li class="${cls}"><a href="#wk${wk.n}"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><b>${wk.name}</b><em>${lbl[cls]}</em></a></li>`; }).join("")}</ol>
+  ${WEEKS.map((wk) => `
+  <section class="wk" id="wk${wk.n}">
+    <div class="wk-hero"><img src="${wk.img}" alt=""><div class="in"><span>${String(wk.n).padStart(2, "0")} · ${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><h2>${wk.name}</h2></div></div>
+    ${wk.keys.map((k) => `
+    <div class="wk-body">
+      <div class="wk-info">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>` : `<h3>세부 일정<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>`}${dl(k)}</div>
+      <div class="wk-panel">${panel(k)}</div>
+    </div>`).join("")}
+  </section>`).join("")}
   <div class="sec"><h2>참가</h2></div>
   <div class="grid g2">
     <div class="card" id="act"></div>
