@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221215";
+import { AIJudge } from "./aijudge.js?v=202611221218";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -956,18 +956,21 @@ async function startTicker() {
   const el = $("#ticker"); if (!el || !S.season) return;
   const P = await poolNumbers().catch(() => ({ pool: 0, users: 0 }));
   const T = sched(S.seasonId);
+  // order: prize → final date → players → next countdown; rotates every 3 s, only the countdown digits tick
   const items = () => {
-    const ne = nextEvent(S.seasonId), out = [];
-    if (P.users > 0) out.push(`${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`);
-    if (ne) out.push(`${esc(ne[1])} <b>${cdText(ne[0])}</b>`);
-    if (P.pool > 0) out.push(`현재 상금 <b>${won(P.pool)}</b>`);
-    out.push(`THE FINAL <b>${mdw(T.FINAL.sat)}</b>`);
-    return out;
+    const ne = nextEvent(S.seasonId);
+    return [
+      `현재 상금 <b>${won(P.pool)}</b>`,
+      `THE FINAL <b>${mdw(T.FINAL.sat)} – ${mdw(T.FINAL.sun)}</b>`,
+      `${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`,
+      ne ? `${esc(ne[1])} <b data-tkcd="${+ne[0]}">${cdText(ne[0])}</b>` : null,
+    ].filter(Boolean);
   };
   let i = 0;
   const show = () => { const it = items(); el.innerHTML = `<span class="tk">${it[i % it.length]}</span>`; };
+  const tickNum = () => { const b = el.querySelector("[data-tkcd]"); if (b) b.textContent = cdText(+b.dataset.tkcd); };
   show(); clearInterval(tickerIv);
-  let n = 0; tickerIv = setInterval(() => { n++; if (n % 4 === 0) i++; show(); }, 1000);
+  let n = 0; tickerIv = setInterval(() => { n++; if (n % 3 === 0) { i++; show(); } else tickNum(); }, 1000);
 }
 
 /* ---------------- boot ---------------- */
