@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221131";
+import { AIJudge } from "./aijudge.js?v=202611221150";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -27,13 +27,60 @@ const RULE = {
   tierAt: 200, regionAt: 2000,
 };
 const STAGES = [
-  { key: "W1", name: "WHO'S NEXT 1주차", kind: "qual", when: "1주차 · 온라인" },
-  { key: "W2", name: "WHO'S NEXT 2주차", kind: "qual", when: "2주차 · 온라인" },
-  { key: "R16", name: "16강", kind: "video", when: "3주차 · 영상" },
-  { key: "QF", name: "8강", kind: "video", when: "4주차 · 영상" },
-  { key: "FINAL", name: "THE FINAL", kind: "final", when: "다음 달 첫 주말 · 박스" },
+  { key: "W1", name: "WHO'S NEXT 1", kind: "qual", when: "1주차" },
+  { key: "W2", name: "WHO'S NEXT 2", kind: "qual", when: "2주차" },
+  { key: "R16", name: "16강", kind: "video", when: "3주차" },
+  { key: "QF", name: "8강", kind: "video", when: "3주차" },
+  { key: "FINAL", name: "THE FINAL", kind: "final", when: "4주차 주말" },
 ];
-const LEVEL = { W1: "Open 수준", W2: "Open 수준", R16: "쿼터파이널 수준", QF: "세미파이널 수준", FINAL: "게임즈 수준" };
+// 4 weeks: W1, W2, week 3 = 16강 + 8강, week 4 weekend = THE FINAL
+const WEEKS = [
+  { n: 1, name: "WHO'S NEXT 1", keys: ["W1"], img: "assets/kf3/n_bike.jpg" },
+  { n: 2, name: "WHO'S NEXT 2", keys: ["W2"], img: "assets/kf3/n_mu1.jpg" },
+  { n: 3, name: "16강 · 8강", keys: ["R16", "QF"], img: "assets/kf3/g_sne.jpg" },
+  { n: 4, name: "THE FINAL", keys: ["FINAL"], img: "assets/kf3/n_shake.jpg" },
+];
+// release (WOD 공개) and close (마감) times for a series "YYYY-MM"
+function sched(id) {
+  const [y, m] = id.split("-").map(Number);
+  const D = (n, h = 0, mi = 0) => new Date(y, m - 1, 1 + n, h, mi);
+  let sat = D(22); while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
+  const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+  return {
+    W1: { open: D(0), close: D(6, 23, 59) },
+    W2: { open: D(7), close: D(13, 23, 59) },
+    R16: { open: D(14), close: D(16, 23, 59) },
+    QF: { open: D(17), close: D(20, 23, 59) },
+    FINAL: { open: D(21), day: new Date(sat.getFullYear(), sat.getMonth(), sat.getDate(), 13), sat, sun },
+  };
+}
+const md = (d) => `${d.getMonth() + 1}.${d.getDate()}`;
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+const mdw = (d) => `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
+const hm = (d) => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+function nextEvent(id, now = new Date()) {
+  const T = sched(id);
+  const ev = [
+    [T.W1.open, "1주차 WOD 공개까지"], [T.W1.close, "1주차 마감까지"],
+    [T.W2.open, "2주차 WOD 공개까지"], [T.W2.close, "2주차 마감까지"],
+    [T.R16.open, "16강 WOD 공개까지"], [T.R16.close, "16강 마감까지"],
+    [T.QF.open, "8강 WOD 공개까지"], [T.QF.close, "8강 마감까지"],
+    [T.FINAL.open, "결승 WOD 공개까지"], [T.FINAL.day, "THE FINAL까지"],
+  ];
+  return ev.find((e) => e[0] > now) || null;
+}
+function cdText(t) {
+  let s = Math.max(0, Math.floor((t - Date.now()) / 1000));
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d}일 ${p(h)}:${p(m)}:${p(s)}`;
+}
+function tickCountdowns() {
+  const run = () => document.querySelectorAll("[data-cd]").forEach((el) => (el.textContent = cdText(+el.dataset.cd)));
+  run(); const iv = setInterval(run, 1000); S.unsub.push(() => clearInterval(iv));
+}
 const G = { M: "남자", F: "여자" };
 
 /* ---------------- state ---------------- */
@@ -80,15 +127,15 @@ function defaultSeason(id) {
   return {
     id, title: `${y}년 ${m}월 시리즈`, current: "W1",
     status: { W1: "reg", W2: "wait", R16: "wait", QF: "wait", FINAL: "wait" },
-    dates: { W1: d(0), W2: d(7), R16: d(14), QF: d(21), FINAL: ymd(sat) },
+    dates: { W1: d(0), W2: d(7), R16: d(14), QF: d(17), FINAL: ymd(sched(id).FINAL.sat) },
     wods: {
-      W1: { title: "WHO'S NEXT 1", scoring: "time", cap: 12, desc: "3 Rounds for time\n15 Cal Row\n12 Toes-to-bar\n9 Power clean 60/40kg\n\nTime cap 12:00 · 캡에 걸리면 남은 렙 수만큼 초가 더해집니다.", move: "cj" },
-      W2: { title: "WHO'S NEXT 2", scoring: "reps", unit: "reps", cap: 10, desc: "10분 AMRAP\n5 Pull-ups\n10 Push-ups\n15 Air squats\n\n총 렙 수로 기록합니다.", move: "generic" },
-      R16: { title: "ROUND OF 16", scoring: "time", cap: 12, desc: "For time\n21-15-9\nThruster 43/29kg\nChest-to-bar pull-ups\n\nTime cap 12:00", move: "cj" },
-      QF: { title: "QUARTERFINAL", scoring: "time", cap: 14, desc: "4 Rounds for time\n20 Cal Row\n10 Bar muscle-ups\n8 Clean & jerk 70/47kg\n\nTime cap 14:00", move: "cj" },
-      FINAL: { title: "THE FINAL", scoring: "time", cap: 12, desc: "3 Rounds for time (1:1 lane)\n20 Cal Row\n5 Ring muscle-ups\nClean & Jerk 10/8/6 — 135/155/185 lb (95/105/125 lb)\n\nTime cap 12:00", move: "cj" },
+      W1: { title: "WHO'S NEXT 1", scoring: "time", cap: 12, desc: "For time · Time cap 12:00\n21-15-9\nCalorie row\nToes-to-bar\nAlternating dumbbell snatch 22.5/15kg\n\n캡에 걸리면 남은 렙 수만큼 초가 더해져요.", move: "generic" },
+      W2: { title: "WHO'S NEXT 2", scoring: "reps", unit: "reps", cap: 13, desc: "AMRAP 13:00\n5 Chest-to-bar pull-ups\n10 Wall-ball shots 9/6kg\n15 Double-unders\n\n총 렙 수로 기록해요.", move: "generic" },
+      R16: { title: "16강", scoring: "time", cap: 14, desc: "4 Rounds for time · Time cap 14:00\n12 Thrusters 43/29kg\n9 Bar-facing burpees\n6 Bar muscle-ups", move: "generic" },
+      QF: { title: "8강", scoring: "time", cap: 15, desc: "For time · Time cap 15:00\n30 Cal Assault bike\n20 Overhead squats 61/43kg\n10 Ring muscle-ups\n20 Overhead squats 61/43kg\n30 Cal Assault bike", move: "generic" },
+      FINAL: { title: "THE FINAL", scoring: "time", cap: 12, desc: "1:1 Lane · Time cap 12:00\n3 Rounds for time\n15 Cal Assault bike\n5 Ring muscle-ups\n5 Power snatches 84/57kg (185/125 lb)", move: "generic" },
     },
-    final: { box: "개최 박스 모집 중", addr: "", time: "토 14:00", stream: "", sponsors: 0, note: "준결승 → 3·4위전 → 결승. 무료 라이브 중계." },
+    final: { box: "개최 박스 모집 중", addr: "", time: "토 13:00", stream: "", sponsors: 0, note: "준결승 → 3·4위전 → 결승" },
     bracket: {},
     createdAt: serverTimestamp(),
   };
@@ -194,7 +241,7 @@ async function poolNumbers() {
 }
 
 /* ---------------- router ---------------- */
-const routes = { "": home, home, wod, rank, bracket, community, me: mePage, admin: adminPage, u: athletePage, box: boxPage };
+const routes = { "": home, home, wod, schedule: wod, about, rank, bracket, community, me: mePage, admin: adminPage, u: athletePage, box: boxPage };
 async function route() {
   S.unsub.forEach((f) => f()); S.unsub = [];
   const [r, arg] = location.hash.replace(/^#\/?/, "").split("/");
@@ -208,81 +255,96 @@ window.addEventListener("hashchange", route);
 /* ---------------- HOME ---------------- */
 async function home() {
   await loadMe();
-  const s = S.season, cur = s.current, ci = stageIdx(cur);
-  const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0, revenue: 0, boost: 0, sponsors: 0 }));
-  const goal = Math.max(1000000, Math.ceil(P.pool / 1000000) * 1000000);
-  const regOpen = s.status[cur] === "reg";
+  const s = S.season, T = sched(S.seasonId), now = new Date();
+  const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0 }));
+  const ne = nextEvent(S.seasonId);
+  const wkNow = WEEKS.findIndex((w) => w.keys.some((k) => T[k].open <= now && now <= (T[k].close || T[k].sun)));
+  const range = (w) => { const a = T[w.keys[0]].open, z = T[w.keys[w.keys.length - 1]]; return w.n === 4 ? `${md(z.sat)}–${md(z.sun)}` : `${md(a)}–${md(z.close)}`; };
+  const prize = (k) => P.pool > 0 ? won((P.pool / 2) * RULE.split[k]) : pct(RULE.split[k]);
   view.innerHTML = `
-  <section class="hero">
-    <img src="assets/kf3/b_point.jpg" alt="" fetchpriority="high">
-    <div class="in">
-      <div class="kicker">${esc(s.title)} · ${esc(LEVEL[cur])}</div>
-      <h1>Underdogs<br>challenge<br>top dogs</h1>
-      <p>크로스핏만으로 겨루는 1대1. 2주 온라인 예선, 16강·8강 영상 본선, 그리고 다음 달 첫 주말 박스에서 열리는 THE FINAL.</p>
-      <div class="row wrap">
-        <a class="btn onimg" href="#/wod">${regOpen ? "참가 신청" : "이번 주 WOD"}</a>
-        <button class="txtlink" id="replay">인트로 보기</button>
+  <section class="slider" id="slider" aria-roledescription="carousel">
+    <div class="slides" id="slides">
+      <div class="hero slide" aria-label="1 / 2">
+        <img src="assets/kf3/b_point.jpg" alt="" fetchpriority="high">
+        <div class="in">
+          <h1>Underdogs<br>challenge<br>top dogs</h1>
+          <p class="lede">지켜볼 건가, 도전할 건가.</p>
+          ${ne ? `<div class="cd"><span>${esc(ne[1])}</span><b data-cd="${+ne[0]}">${cdText(ne[0])}</b></div>` : ""}
+          <a class="btn onimg" href="#/schedule">도전하기</a>
+        </div>
+      </div>
+      <div class="hero slide" aria-label="2 / 2">
+        <img src="assets/kf3/n_shake.jpg" alt="" loading="lazy">
+        <div class="in">
+          <div class="kicker">${esc(s.title)} 상금</div>
+          <h1>${P.pool > 0 ? won(P.pool) : "Prize"}</h1>
+          <div class="prize">${[["우승", "1"], ["준우승", "2"], ["3위", "3"], ["4위", "4"], ["8강", "QF"], ["16강", "R16"]].map(([l, k]) => `<div><span>${l}</span><b>${prize(k)}</b></div>`).join("")}</div>
+          <a class="btn onimg" href="#/about">자세히</a>
+        </div>
       </div>
     </div>
+    <button class="sl-btn prev" aria-label="이전" id="slPrev">‹</button><button class="sl-btn next" aria-label="다음" id="slNext">›</button>
+    <div class="dots" id="dots"><button aria-label="1번 슬라이드" class="on"></button><button aria-label="2번 슬라이드"></button></div>
   </section>
 
-  <div class="sec"><h2>이번 달 일정</h2><small>단계마다 난이도가 올라가요</small></div>
-  <div class="stages">${STAGES.map((st, i) => `
-    <div class="stage ${i === ci ? "now" : i < ci ? "done" : ""}">
-      <span>${st.when}</span><b>${st.key === "W1" || st.key === "W2" ? "Who's Next" : st.key === "FINAL" ? "The Final" : st.name}</b>
-      <span>${st.key === "W1" ? "1주차 · " : st.key === "W2" ? "2주차 · " : ""}${esc(LEVEL[st.key])}</span>
-      <span>${esc(s.dates?.[st.key] || "")}</span>
-    </div>`).join("")}
+  <div class="sec"><h2>${esc(s.title)}</h2></div>
+  <div class="stages">${WEEKS.map((w, i) => `
+    <a class="stage ${i === wkNow ? "now" : ""}" href="#/schedule">
+      <span>${w.n}주차${w.n === 4 ? " 주말" : ""}</span><b>${w.name}</b><span>${range(w)}</span>
+    </a>`).join("")}
   </div>
 
-  <div class="sec"><h2>세 단계, 하나의 결승</h2></div>
-  <div class="tiles">
-    <a class="tile" href="#/wod"><img src="assets/kf3/n_bike.jpg" alt="" loading="lazy"><div class="in"><span>1–2주차 · 온라인</span><b>Who's Next</b><span class="btn onimg sm">이번 주 WOD</span></div></a>
-    <a class="tile" href="#/bracket"><img src="assets/kf3/g_sne.jpg" alt="" loading="lazy"><div class="in"><span>3–4주차 · 영상</span><b>16강 · 8강</b><span class="btn onimg sm">대진표</span></div></a>
-    <a class="tile" href="#/bracket"><img src="assets/kf3/n_shake.jpg" alt="" loading="lazy"><div class="in"><span>다음 달 첫 주말 · 박스</span><b>The Final</b><span class="btn onimg sm">결승 안내</span></div></a>
-  </div>
-
-  <div class="sec"><h2>상금</h2><small>수익 40% + 팬 부스트 + 스폰서</small></div>
-  <div class="grid g2">
-    <div class="card">
-      <div class="big">${won(P.pool)}</div>
-      <div class="meter" style="margin:20px 0 12px"><i style="width:${Math.min(100, (P.pool / goal) * 100)}%"></i></div>
-      <div class="row muted" style="font-size:14px;font-weight:500;justify-content:space-between"><span>선수 ${P.users}명 · Pro ${P.pro}명</span><span>다음 목표 ${won(goal)}</span></div>
-      <div class="split" style="margin-top:24px">
-        ${[["우승", "1"], ["준우승", "2"], ["3위", "3"], ["4위", "4"], ["8강", "QF"], ["16강", "R16"]].map(([l, k]) => `<div>${l}<b>${won((P.pool / 2) * RULE.split[k])}</b></div>`).join("")}
-      </div>
-      <p class="muted" style="font-size:12px;margin:12px 0 0">성별 디비전별로 상금의 절반씩. 지급 시 원천징수 약 4.4% 공제. 팬 부스트는 해당 선수 상금에 더해져요.</p>
-    </div>
-    <div class="card cta">
-      <h3>다음은 누구?</h3>
-      ${S.me ? myStatusCard() : `<div class="vs"><span>You</span><span class="dim">vs</span><span>Who</span></div>
-      <p class="muted" style="margin:16px 0 24px">레이팅이 비슷한 4명이 한 포드. 이기면 오르고, 위로 도전해서 이기면 업셋. 업셋이 쌓이면 챔피언에게 도전할 수 있어요.</p>
-      <button class="btn red" id="ctaJoin">선수 등록</button>`}
-    </div>
-  </div>
-
-  <div class="sec"><h2>어떻게 진행되나요</h2></div>
-  <div class="steps">
-    <div><b>포드 & 도전</b><p>일요일에 접수 마감, 월요일에 레이팅순 4인 포드 편성. 주 1회 무료 도전으로 나보다 최대 300점 위 선수를 지목해요. 기록은 마감 전까지 비공개.</p></div>
-    <div><b>예선 포인트</b><p>포드 승률 + 전체 백분위 = 예선 포인트. 2주 합산 상위 14명과 업셋 와일드카드 2명이 16강에 올라요. 미제출은 3패 처리.</p></div>
-    <div><b>AI 심판 → 상대 검토 → 관리자</b><p>폰에서 17개 관절을 추적해 렙을 셉니다. 측면·전신·모니터·오늘의 코드가 보이게 찍고, YouTube 일부공개 링크로 제출해요.</p></div>
+  <div class="sec"><h2>다음은 누구?</h2></div>
+  <div class="card cta">
+    ${S.me ? myStatusCard() : `<div class="vs"><span>You</span><span class="dim">vs</span><span>Who</span></div>
+    <button class="btn red" id="ctaJoin" style="margin-top:24px">선수 등록</button>`}
   </div>
 
   <footer class="footer">
-    <div><b>대회</b><a href="#/wod">이번 주 WOD</a><a href="#/rank">랭킹</a><a href="#/bracket">본선 대진</a></div>
+    <div><b>대회</b><a href="#/schedule">일정</a><a href="#/rank">랭킹</a><a href="#/bracket">본선</a></div>
     <div><b>커뮤니티</b><a href="#/community">피드</a><a href="#/bracket">예측 리그</a></div>
-    <div><b>선수</b><a href="#/me">내 정보</a><a href="#/wod">기록 제출</a></div>
-    <div><b>박스</b><span>결승 개최 박스 모집 중</span></div>
-  </footer>
-  <p class="fine">YOU vs WHO는 대학 프로젝트로 설계된 서비스예요. 결제는 데모이며 실제 금액이 청구되지 않아요. 실제 돈을 거는 베팅은 없고, 포인트로만 하는 예측 리그를 운영해요.</p>`;
-  $("#replay").onclick = () => window.YVWINTRO && window.YVWINTRO.play({ force: true });
+    <div><b>선수</b><a href="#/me">내 정보</a></div>
+    <div><b>YOU vs WHO</b><a href="#/about">About</a></div>
+  </footer>`;
   const cj = $("#ctaJoin"); if (cj) cj.onclick = () => authModal("join");
+  // slider: swipe (scroll-snap), arrows, dots, auto-advance
+  const sl = $("#slides"), dots = [...document.querySelectorAll("#dots button")];
+  const go = (i) => sl.scrollTo({ left: i * sl.clientWidth, behavior: "smooth" });
+  const idx = () => Math.round(sl.scrollLeft / sl.clientWidth);
+  sl.addEventListener("scroll", () => dots.forEach((d, i) => d.classList.toggle("on", i === idx())), { passive: true });
+  dots.forEach((d, i) => (d.onclick = () => go(i)));
+  $("#slPrev").onclick = () => go(Math.max(0, idx() - 1));
+  $("#slNext").onclick = () => go(Math.min(dots.length - 1, idx() + 1));
+  let paused = false; $("#slider").onmouseenter = () => (paused = true); $("#slider").onmouseleave = () => (paused = false);
+  const iv = setInterval(() => { if (!paused && !document.hidden) go((idx() + 1) % dots.length); }, 7000);
+  S.unsub.push(() => clearInterval(iv));
+  tickCountdowns();
 }
+
+/* ---------------- ABOUT ---------------- */
+async function about() {
+  view.innerHTML = `
+  <h1 class="pagehead">About</h1>
+  <div class="about">
+    <section><h2>YOU vs WHO</h2><p>언더독이 탑독에게 도전하는 크로스핏 1대1 챌린지예요. 매달 한 시리즈가 열리고, 누구든 예선부터 시작해 결승 무대까지 올라갈 수 있어요.</p></section>
+    <section><h2>한 달, 네 주</h2>
+      <ul><li><b>1·2주차 WHO'S NEXT</b>온라인 예선. 주차 첫날 0시에 WOD 공개, 7일째 23:59 마감.</li>
+      <li><b>3주차 16강 · 8강</b>영상 본선. 3주차 앞 3일은 16강, 뒤 4일은 8강.</li>
+      <li><b>4주차 주말 THE FINAL</b>오프라인 박스 결승. WOD는 4주차가 시작될 때 공개돼서 한 번 시도해 보고 나올 수 있어요.</li></ul></section>
+    <section><h2>포드 & 도전</h2><p>접수가 마감되면 레이팅이 비슷한 4명이 한 포드로 묶여요. 주 1회, 나보다 최대 300점 위 선수에게 무료로 도전할 수 있어요. 기록은 마감 전까지 비공개예요.</p></section>
+    <section><h2>예선 포인트</h2><p>포드 승률과 전체 백분위를 합쳐 예선 포인트가 돼요. 2주 합산 상위 14명과 업셋 와일드카드 2명이 16강에 올라요. 미제출은 3패로 처리돼요.</p></section>
+    <section><h2>레이팅</h2><p>모든 선수는 1500에서 시작해요. 이기면 오르고 지면 내려가요. 위로 도전해서 이기면 업셋 점수가 쌓이고, 업셋이 쌓이면 챔피언에게 도전할 수 있어요.</p></section>
+    <section><h2>AI 심판</h2><p>휴대폰 카메라로 17개 관절을 추적해 렙을 세요. 측면에서 전신과 기구 모니터, 오늘의 코드가 보이게 찍어 YouTube 일부공개 링크로 제출해요. AI 판정 → 상대 선수 검토 → 관리자 확정 순서로 기록이 확정돼요.</p></section>
+    <section><h2>상금</h2><p>구독 수익의 40%, 팬 부스트, 스폰서 금액이 모여 상금이 돼요. 성별 디비전별로 절반씩, 우승 45% · 준우승 20% · 3위 9% · 4위 6% · 8강 3% · 16강 1%로 나눠요.</p></section>
+    <section><h2>안내</h2><p>YOU vs WHO는 대학 프로젝트로 설계된 서비스예요. 결제는 데모이며 실제 금액이 청구되지 않아요. 실제 돈을 거는 베팅은 없고, 포인트로만 하는 예측 리그를 운영해요.</p></section>
+  </div>`;
+}
+
 function myStatusCard() {
   const m = S.me, cur = S.season.current;
   return `<div class="row"><div class="av lg">${initial(m.name)}</div><div><b style="font-size:18px">${esc(m.name)}</b>${badgeFor(m)}<div class="muted">${G[m.gender]} · ${esc(m.box || "소속 없음")}</div></div></div>
   <div class="grid g3" style="margin-top:14px"><div class="stat"><b>${Math.round(m.rating)}</b><span>레이팅</span></div><div class="stat"><b>${m.wins || 0}-${m.losses || 0}</b><span>포드 전적</span></div><div class="stat"><b>${m.upsets || 0}</b><span>업셋</span></div></div>
-  <a class="btn red block" style="margin-top:14px" href="#/wod">${esc(STAGES[stageIdx(cur)].name)} 바로가기</a>`;
+  <a class="btn red block" style="margin-top:14px" href="#/schedule">${esc(STAGES[stageIdx(cur)].name)} 바로가기</a>`;
 }
 
 /* ---------------- WOD (this week) ---------------- */
@@ -299,23 +361,36 @@ async function wod() {
   const rd = await getDoc(doc(db, "results", stKey)); res = rd.exists() ? rd.data() : null;
   const statusLabel = { reg: "참가 접수 중 (일요일 마감)", live: "진행 중 · 기록 제출 가능", closed: "마감 · 결과 공개", wait: "준비 중" }[status] || status;
   const code = dailyCode();
+  const T = sched(S.seasonId), now = new Date();
+  const wodBlock = (k) => {
+    const ww = s.wods[k] || {}, t = T[k];
+    if (now < t.open) return `<div class="locked"><span>WOD 공개까지</span><b data-cd="${+t.open}">${cdText(t.open)}</b><span>${mdw(t.open)} ${hm(t.open)} 공개</span></div>`;
+    return `<pre class="wodtxt">${esc(ww.desc || "")}</pre>`;
+  };
+  const when = (k) => { const t = T[k]; return k === "FINAL" ? `WOD 공개 ${mdw(t.open)} · 결승 ${mdw(t.sat)}–${t.sun.getDate()}일` : `WOD 공개 ${mdw(t.open)} ${hm(t.open)} · 마감 ${mdw(t.close)} ${hm(t.close)}`; };
   view.innerHTML = `
-  <div class="row wrap"><div><div class="kicker">${esc(s.title)} · ${esc(st.when)}</div><h1 class="disp" style="font-size:40px;margin-top:6px">${esc(w.title || st.name)}</h1></div><span class="sp"></span><span class="pill ${status === "live" ? "red" : status === "closed" ? "green" : ""}">${statusLabel}</span></div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><h3>WOD <span class="pill">${esc(LEVEL[cur])}</span></h3><pre class="mono" style="white-space:pre-wrap;font-size:15px;line-height:1.7;margin:0">${esc(w.desc || "")}</pre>
-      <hr><div class="row wrap" style="font-size:13px"><span class="pill">기록: ${w.scoring === "time" ? "시간 (낮을수록 좋음)" : "렙/무게 (높을수록 좋음)"}</span><span class="pill">오늘의 코드 <b class="mono" style="color:var(--ink)">${code}</b></span></div>
-      <p class="dim" style="font-size:12px;margin:10px 0 0">촬영 규정: 측면에서 전신이 보이게, 기구 모니터와 바·턱 높이가 화면에 들어오게, 시작 전 오늘의 코드를 종이에 써서 비춰 주세요. 판독할 수 없는 렙은 선수 페널티예요.</p>
-    </div>
+  <h1 class="pagehead">일정</h1>
+  <p class="subhead">${esc(s.title)}</p>
+  <div class="weeks">${WEEKS.map((wk) => `
+    <section class="week ${wk.keys.includes(cur) ? "now" : ""}">
+      <div class="wk-h"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><h2>${wk.name}</h2></div>
+      ${wk.keys.map((k) => `<div class="wk-ev">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}</h3>` : ""}<p class="wk-when">${when(k)}</p>${wodBlock(k)}</div>`).join("")}
+    </section>`).join("")}
+  </div>
+  <div class="sec"><h2>참가</h2></div>
+  <div class="grid g2">
     <div class="card" id="act"></div>
+    <div class="card"><h3>오늘의 코드</h3><div class="big">${code}</div><p class="muted" style="font-size:14px;margin:12px 0 0">영상 시작 전에 종이에 써서 화면에 비춰 주세요.</p></div>
   </div>
   <div id="podBox"></div>
   <div id="resBox"></div>`;
+  tickCountdowns();
   const act = $("#act");
   // action panel
   if (st.kind === "final") {
-    act.innerHTML = `<h3>THE FINAL · 오프라인</h3><p style="font-size:18px;font-weight:700;margin:0">${esc(s.final.box)}</p><p class="muted">${esc(s.dates.FINAL)} ${esc(s.final.time)} · ${esc(s.final.addr)}</p><p class="muted">${esc(s.final.note)}</p>${s.final.stream ? `<a class="btn red" target="_blank" rel="noopener" href="${esc(s.final.stream)}">무료 라이브 보기</a>` : `<span class="pill">라이브 링크는 결승 당일 공개</span>`}`;
+    act.innerHTML = `<h3>THE FINAL</h3><p style="font-size:18px;font-weight:500;margin:0">${esc(s.final.box)}</p><p class="muted">${mdw(sched(S.seasonId).FINAL.sat)} ${esc(s.final.time)} ${esc(s.final.addr)}</p>${s.final.stream ? `<a class="btn red" target="_blank" rel="noopener" href="${esc(s.final.stream)}">무료 라이브 보기</a>` : `<span class="pill">라이브 링크는 결승 당일 공개</span>`}`;
   } else if (!S.user) {
-    act.innerHTML = `<h3>참가하려면</h3><p class="muted">로그인하면 신청·포드·도전·기록 제출을 할 수 있어요. 둘러보기는 로그인 없이 가능해요.</p><button class="btn red" id="li">로그인 / 가입</button>`;
+    act.innerHTML = `<h3>참가하려면</h3><button class="btn red" id="li">로그인 / 가입</button>`;
     $("#li").onclick = () => authModal("login");
   } else if (!S.me) {
     act.innerHTML = `<p class="muted">선수 프로필이 없어요. 다시 로그인해 주세요.</p>`;
@@ -436,12 +511,10 @@ async function rank(arg) {
   const wc = st.filter((x) => !top14.has(x.uid) && x.pctAvg >= 1 - RULE.wildcardPct).sort((a, b) => b.upsetScore - a.upsetScore).slice(0, RULE.wildcards);
   const wcs = new Set(wc.map((x) => x.uid));
   view.innerHTML = `
-  <div class="row wrap"><h1 class="disp" style="font-size:38px">랭킹</h1><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/rank/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/rank/F'">여자</button></div></div>
-  <p class="muted">숫자는 두 개뿐이에요. <b>레이팅</b>은 통산 실력(매칭에만 사용), <b>예선 포인트</b>는 이번 시리즈 16강 진출 기준. 시상대는 대진 결과로만 정해져요.</p>
+  <div class="row wrap"><h1 class="pagehead">랭킹</h1><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/rank/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/rank/F'">여자</button></div></div>
   <div class="grid g2">
     <div class="card"><h3>예선 포인트 · ${esc(S.season.title)} <span class="pill">${field}명</span></h3>
       ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${Math.round(x.upsetScore || 0)}</td><td class="r">${!x.pro && (top14.has(x.uid) || wcs.has(x.uid)) ? `<span class="pill">Pro 필요</span>` : top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
-      <p class="dim" style="font-size:12px">상위 ${RULE.qualifiers}명 + 와일드카드 ${RULE.wildcards}명(업셋 점수 합계 최상위, 전체 상위 ${RULE.wildcardPct * 100}% 이내). 16강은 선수 Pro 구독자만 출전.</p>
     </div>
     <div class="card"><h3>레이팅 (통산)</h3>
       ${users.length ? `<table><tr><th>#</th><th>선수</th><th>박스</th><th class="r">레이팅</th></tr>${users.slice(0, 100).map((u, i) => `<tr class="${u.id === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${u.id}">${esc(u.name)}</a>${badgeFor(u)}</td><td class="dim">${esc(u.box || "")}</td><td class="r mono">${Math.round(u.rating)}</td></tr>`).join("")}</table>` : `<div class="empty">아직 선수가 없어요.</div>`}
@@ -461,7 +534,6 @@ async function bracket(arg) {
   const preds = S.user ? (await getDoc(doc(db, "predictions", S.seasonId + "_" + S.user.uid))).data() || { picks: {} } : { picks: {} };
   view.innerHTML = `
   <div class="row wrap"><h1 class="disp" style="font-size:38px">본선</h1><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/bracket/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/bracket/F'">여자</button></div></div>
-  <p class="muted">16강·8강은 영상, 4강부터는 다음 달 첫 주말 개최 박스에서 오프라인으로. 결승 진출자가 못 오면 8강 탈락자 중 예선 포인트 최상위가 대체 출전해요.</p>
   <div class="card" style="overflow-x:auto"><div class="bk">${col("R16", 8, "16강 · 영상")}${col("QF", 4, "8강 · 영상")}${col("SF", 2, "4강 · 박스")}<div class="col"><h4>결승 · 3·4위전</h4>${(b.F || [[null, null, null]]).map(mt).join("")}${(b.P3 || [[null, null, null]]).map(mt).join("")}</div></div></div>
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><h3>THE FINAL</h3><p style="font-size:20px;font-weight:900;margin:0">${esc(S.season.final.box)}</p><p class="muted">${esc(S.season.dates.FINAL)} ${esc(S.season.final.time)} ${esc(S.season.final.addr || "")}</p><p class="muted">${esc(S.season.final.note)}</p>${S.season.final.stream ? `<a class="btn red" href="${esc(S.season.final.stream)}" target="_blank" rel="noopener">무료 라이브</a>` : ""}</div>
@@ -503,8 +575,8 @@ function predPoints(picks) {
 }
 
 /* ---------------- ME ---------------- */
-async function mePage() {
-  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div><hr><button class="btn ghost" id="rp">▶ 인트로 다시 보기</button></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); $("#rp").onclick = () => window.YVWINTRO?.play({ force: true }); return; }
+async function mePage(arg) {
+  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
   await loadMe(); renderWho();
   const m = S.me || {};
   if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = () => signOut(auth); return; }
@@ -514,7 +586,7 @@ async function mePage() {
   <div class="card"><div class="row wrap"><div class="av lg">${initial(m.name)}</div><div><h2 style="font-size:24px">${esc(m.name)}${badgeFor(m)}</h2><div class="muted">${G[m.gender]} · ${esc(m.box || "소속 없음")} · ${esc(S.user.email)}</div></div><span class="sp"></span><a class="btn ghost sm" href="#/u/${S.user.uid}">공개 프로필</a></div>
   <div class="grid g4" style="margin-top:16px"><div class="stat"><b>${Math.round(m.rating)}</b><span>레이팅 ${(m.weeksPlayed || 0) < RULE.placementWeeks ? "(배치 중)" : ""}</span></div><div class="stat"><b>${m.wins || 0}-${m.losses || 0}</b><span>포드 전적</span></div><div class="stat"><b>${m.upsets || 0}</b><span>업셋 (연속 ${m.upsetStreak || 0})</span></div><div class="stat"><b>${won(bsum)}</b><span>받은 팬 부스트</span></div></div></div>
 
-  <div class="sec"><h2>구독</h2><small>데모 결제 · 실제 청구 없음</small></div>
+  <div class="sec"><h2>구독</h2></div>
   <div class="grid g3">
     <div class="card"><h3>선수 Pro <span class="pill ${m.pro ? "green" : ""}">${m.pro ? "구독 중" : "미구독"}</span></h3><div class="big num" style="font-size:32px">${won(RULE.pro)}<small class="muted" style="font-size:14px">/월</small></div><p class="muted" style="font-size:14px;line-height:1.6">16강 이상 본선 출전 자격 · 관전 패스 포함 · 본선 참가비 없음</p><button class="btn ${m.pro ? "ghost" : "red"} block" data-sub="pro">${m.pro ? "구독 해지" : "Pro 시작하기"}</button></div>
     <div class="card"><h3>관전 패스 <span class="pill ${m.viewer || m.pro ? "green" : ""}">${m.pro ? "Pro 포함" : m.viewer ? "구독 중" : "미구독"}</span></h3><div class="big num" style="font-size:32px">${won(RULE.viewer)}<small class="muted" style="font-size:14px">/월</small></div><p class="muted" style="font-size:14px;line-height:1.6">AI 판독 리플레이 · 다시보기 · 광고 제거. 결승 라이브는 누구나 무료.</p><button class="btn ghost block" data-sub="viewer" ${m.pro ? "disabled" : ""}>${m.viewer ? "해지" : "관전 패스 시작"}</button></div>
@@ -524,9 +596,8 @@ async function mePage() {
   <div class="sec"><h2>프로필 수정</h2></div>
   <form class="card" id="pfm"><div class="grid g2"><div><label>선수 이름</label><input name="name" value="${esc(m.name)}" maxlength="20"></div><div><label>소속 박스</label><input name="box" value="${esc(m.box || "")}" maxlength="30"></div></div><button class="btn ghost" style="margin-top:12px">저장</button></form>
 
-  <div class="row wrap" style="margin-top:18px"><button class="btn ghost" id="rp">▶ 인트로 다시 보기</button>${!S.adminsExist ? `<button class="btn ghost" id="claim">관리자 등록 (최초 1회)</button>` : ""}<span class="sp"></span><button class="btn ghost" id="lo">로그아웃</button></div>`;
+  <div class="row wrap" style="margin-top:24px">${!S.adminsExist && arg === "admin" ? `<button class="btn ghost" id="claim">관리자 등록</button>` : ""}<span class="sp"></span><button class="btn ghost" id="lo">로그아웃</button></div>`;
   $("#lo").onclick = () => signOut(auth);
-  $("#rp").onclick = () => window.YVWINTRO?.play({ force: true });
   const cl = $("#claim"); if (cl) cl.onclick = () => guard(async () => { await setDoc(doc(db, "config", "admins"), { uids: [S.user.uid], at: serverTimestamp() }); toast("관리자로 등록됐어요"); await loadMe(); renderWho(); route(); });
   $("#pfm").onsubmit = (e) => { e.preventDefault(); guard(async () => { await updateDoc(doc(db, "users", S.user.uid), { name: e.target.name.value.trim(), box: e.target.box.value.trim() }); await loadMe(); toast("저장했어요"); route(); }); };
   document.querySelectorAll("[data-sub]").forEach((b) => (b.onclick = () => payModal(b.dataset.sub)));
@@ -856,10 +927,31 @@ async function wipeDemo() {
   const batch = writeBatch(db); qs.forEach((d) => batch.delete(d.ref)); await batch.commit(); toast(`가상 선수 ${qs.size}명 삭제`); route();
 }
 
+/* ---------------- top ticker ---------------- */
+let tickerIv = null;
+async function startTicker() {
+  const el = $("#ticker"); if (!el || !S.season) return;
+  const P = await poolNumbers().catch(() => ({ pool: 0, users: 0 }));
+  const T = sched(S.seasonId);
+  const items = () => {
+    const ne = nextEvent(S.seasonId), out = [];
+    out.push(`${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`);
+    if (ne) out.push(`${esc(ne[1])} <b>${cdText(ne[0])}</b>`);
+    out.push(`현재 상금 <b>${won(P.pool)}</b>`);
+    out.push(`THE FINAL <b>${mdw(T.FINAL.sat)}</b>`);
+    return out;
+  };
+  let i = 0;
+  const show = () => { const it = items(); el.innerHTML = `<span class="tk">${it[i % it.length]}</span>`; };
+  show(); clearInterval(tickerIv);
+  let n = 0; tickerIv = setInterval(() => { n++; if (n % 4 === 0) i++; show(); }, 1000);
+}
+
 /* ---------------- boot ---------------- */
 onAuthStateChanged(auth, async (u) => {
   S.user = u;
   await guard(async () => { await loadSeason(); await loadMe(); });
   renderWho();
   route();
+  startTicker();
 });
