@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221200";
+import { AIJudge } from "./aijudge.js?v=202611221201";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -367,14 +367,17 @@ async function wod() {
     if (now < t.open) return `<div class="locked"><span>WOD 공개까지</span><b data-cd="${+t.open}">${cdText(t.open)}</b><span>${mdw(t.open)} ${hm(t.open)} 공개</span></div>`;
     return `<pre class="wodtxt">${esc(ww.desc || "")}</pre>`;
   };
-  const when = (k) => { const t = T[k]; return k === "FINAL" ? `WOD 공개 ${mdw(t.open)} · 결승 ${mdw(t.sat)}–${t.sun.getDate()}일` : `WOD 공개 ${mdw(t.open)} ${hm(t.open)} · 마감 ${mdw(t.close)} ${hm(t.close)}`; };
+  const when = (k) => { const t = T[k]; const row = (a, b) => `<div><dt>${a}</dt><dd>${b}</dd></div>`;
+    return `<dl class="wk-dl">${k === "FINAL"
+      ? row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("결승", `${mdw(t.sat)} – ${mdw(t.sun)}`) + row("장소", esc(s.final.box))
+      : row("기간", `${md(t.open)} – ${md(t.close)}`) + row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("마감", `${mdw(t.close)} ${hm(t.close)}`)}</dl>`; };
   view.innerHTML = `
   <h1 class="pagehead">일정</h1>
   <p class="subhead">${esc(s.title)}</p>
   <div class="weeks">${WEEKS.map((wk) => `
     <section class="week ${wk.keys.includes(cur) ? "now" : ""}">
       <div class="wk-h"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><h2>${wk.name}</h2></div>
-      ${wk.keys.map((k) => `<div class="wk-ev">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}</h3>` : ""}<p class="wk-when">${when(k)}</p>${wodBlock(k)}</div>`).join("")}
+      ${wk.keys.map((k) => `<div class="wk-ev">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}</h3>` : ""}${when(k)}${wodBlock(k)}</div>`).join("")}
     </section>`).join("")}
   </div>
   <div class="sec"><h2>참가</h2></div>
