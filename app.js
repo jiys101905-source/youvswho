@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611220027";
+import { AIJudge } from "./aijudge.js?v=202611221128";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -211,16 +211,17 @@ async function home() {
   const s = S.season, cur = s.current, ci = stageIdx(cur);
   const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0, revenue: 0, boost: 0, sponsors: 0 }));
   const goal = Math.max(1000000, Math.ceil(P.pool / 1000000) * 1000000);
+  const regOpen = s.status[cur] === "reg";
   view.innerHTML = `
   <section class="hero">
-    <video class="poster" src="assets/hero.mp4" autoplay muted loop playsinline poster="assets/kf3/b_entr.jpg"></video>
+    <img src="assets/kf3/b_point.jpg" alt="" fetchpriority="high">
     <div class="in">
       <div class="kicker">${esc(s.title)} · ${esc(LEVEL[cur])}</div>
-      <h1>UNDERDOGS<br>CHALLENGE <em>TOP DOGS</em></h1>
-      <p>크로스핏만으로 겨루는 1대1. 2주 온라인 예선 WHO'S NEXT, 16강·8강 영상 본선, 그리고 다음 달 첫 주말 박스에서 열리는 THE FINAL.</p>
+      <h1>Underdogs<br>challenge<br>top dogs</h1>
+      <p>크로스핏만으로 겨루는 1대1. 2주 온라인 예선, 16강·8강 영상 본선, 그리고 다음 달 첫 주말 박스에서 열리는 THE FINAL.</p>
       <div class="row wrap">
-        <a class="btn red" href="#/wod">${s.status[cur] === "reg" ? "이번 주 참가 신청" : "이번 주 WOD 보기"}</a>
-        <button class="btn ghost" id="replay">▶ THE FINAL 인트로</button>
+        <a class="btn onimg" href="#/wod">${regOpen ? "참가 신청" : "이번 주 WOD"}</a>
+        <button class="txtlink" id="replay">인트로 보기</button>
       </div>
     </div>
   </section>
@@ -228,39 +229,52 @@ async function home() {
   <div class="sec"><h2>이번 달 일정</h2><small>단계마다 난이도가 올라가요</small></div>
   <div class="stages">${STAGES.map((st, i) => `
     <div class="stage ${i === ci ? "now" : i < ci ? "done" : ""}">
-      <span>${st.when}</span><b>${st.key === "W1" || st.key === "W2" ? "WHO'S NEXT" : st.key === "FINAL" ? "THE FINAL" : st.name}</b>
-      <span>${st.key === "W1" ? "1주차" : st.key === "W2" ? "2주차" : ""} ${esc(LEVEL[st.key])}</span><br>
-      <span class="mono dim">${esc(s.dates?.[st.key] || "")}</span>
+      <span>${st.when}</span><b>${st.key === "W1" || st.key === "W2" ? "Who's Next" : st.key === "FINAL" ? "The Final" : st.name}</b>
+      <span>${st.key === "W1" ? "1주차 · " : st.key === "W2" ? "2주차 · " : ""}${esc(LEVEL[st.key])}</span>
+      <span>${esc(s.dates?.[st.key] || "")}</span>
     </div>`).join("")}
   </div>
 
-  <div class="grid g2" style="margin-top:14px">
+  <div class="sec"><h2>세 단계, 하나의 결승</h2></div>
+  <div class="tiles">
+    <a class="tile" href="#/wod"><img src="assets/kf3/n_bike.jpg" alt="" loading="lazy"><div class="in"><span>1–2주차 · 온라인</span><b>Who's Next</b><span class="btn onimg sm">이번 주 WOD</span></div></a>
+    <a class="tile" href="#/bracket"><img src="assets/kf3/g_sne.jpg" alt="" loading="lazy"><div class="in"><span>3–4주차 · 영상</span><b>16강 · 8강</b><span class="btn onimg sm">대진표</span></div></a>
+    <a class="tile" href="#/bracket"><img src="assets/kf3/n_shake.jpg" alt="" loading="lazy"><div class="in"><span>다음 달 첫 주말 · 박스</span><b>The Final</b><span class="btn onimg sm">결승 안내</span></div></a>
+  </div>
+
+  <div class="sec"><h2>상금</h2><small>수익 40% + 팬 부스트 + 스폰서</small></div>
+  <div class="grid g2">
     <div class="card">
-      <h3>실시간 상금 미터 <span class="pill gold">수익 40% + 팬 부스트 + 스폰서</span></h3>
-      <div class="big num">${won(P.pool)}</div>
-      <div class="meter" style="margin:12px 0"><i style="width:${Math.min(100, (P.pool / goal) * 100)}%"></i></div>
-      <div class="row muted" style="font-size:13px;justify-content:space-between"><span>선수 ${P.users}명 · Pro ${P.pro}명</span><span>다음 목표 ${won(goal)}</span></div>
-      <hr>
-      <div class="split">
-        ${[["우승", "1"], ["준우승", "2"], ["3위", "3"], ["4위", "4"], ["8강 탈락 각", "QF"], ["16강 탈락 각", "R16"]].map(([l, k]) => `<div>${l}<b>${won((P.pool / 2) * RULE.split[k])}</b></div>`).join("")}
+      <div class="big">${won(P.pool)}</div>
+      <div class="meter" style="margin:20px 0 12px"><i style="width:${Math.min(100, (P.pool / goal) * 100)}%"></i></div>
+      <div class="row muted" style="font-size:14px;font-weight:500;justify-content:space-between"><span>선수 ${P.users}명 · Pro ${P.pro}명</span><span>다음 목표 ${won(goal)}</span></div>
+      <div class="split" style="margin-top:24px">
+        ${[["우승", "1"], ["준우승", "2"], ["3위", "3"], ["4위", "4"], ["8강", "QF"], ["16강", "R16"]].map(([l, k]) => `<div>${l}<b>${won((P.pool / 2) * RULE.split[k])}</b></div>`).join("")}
       </div>
-      <p class="dim" style="font-size:12px;margin:10px 0 0">성별 디비전별로 상금의 절반씩. 지급 시 원천징수 약 4.4% 공제. 팬 부스트는 해당 선수 상금에 더해져요.</p>
+      <p class="muted" style="font-size:12px;margin:12px 0 0">성별 디비전별로 상금의 절반씩. 지급 시 원천징수 약 4.4% 공제. 팬 부스트는 해당 선수 상금에 더해져요.</p>
     </div>
     <div class="card cta">
       <h3>다음은 누구?</h3>
-      ${S.me ? myStatusCard() : `<div class="vs"><span class="y">YOU</span><span class="dim" style="font-size:18px">vs</span><span class="w">WHO</span></div>
-      <p class="muted">레이팅이 비슷한 4명이 한 포드. 이기면 오르고, 위로 도전해서 이기면 업셋. 업셋이 쌓이면 챔피언에게 도전할 수 있어요.</p>
+      ${S.me ? myStatusCard() : `<div class="vs"><span>You</span><span class="dim">vs</span><span>Who</span></div>
+      <p class="muted" style="margin:16px 0 24px">레이팅이 비슷한 4명이 한 포드. 이기면 오르고, 위로 도전해서 이기면 업셋. 업셋이 쌓이면 챔피언에게 도전할 수 있어요.</p>
       <button class="btn red" id="ctaJoin">선수 등록</button>`}
     </div>
   </div>
 
   <div class="sec"><h2>어떻게 진행되나요</h2></div>
-  <div class="grid g3">
-    <div class="card"><h3>① 포드 & 도전</h3><p class="muted" style="line-height:1.7;margin:0">일요일에 접수 마감, 월요일에 레이팅순 4인 포드 편성. 주 1회 무료 도전으로 나보다 최대 300점 위 선수를 지목해요. 기록은 마감 전까지 비공개.</p></div>
-    <div class="card"><h3>② 예선 포인트</h3><p class="muted" style="line-height:1.7;margin:0">포드 승률 + 전체 백분위 = 예선 포인트. 2주 합산 상위 14명과 업셋 와일드카드 2명이 16강에 올라요. 미제출은 3패 처리.</p></div>
-    <div class="card"><h3>③ AI 심판 → 상대 검토 → 관리자</h3><p class="muted" style="line-height:1.7;margin:0">폰에서 17개 관절을 추적해 렙을 셉니다. 측면·전신·모니터·오늘의 코드가 보이게 찍고, YouTube 일부공개 링크로 제출해요.</p></div>
+  <div class="steps">
+    <div><b>포드 & 도전</b><p>일요일에 접수 마감, 월요일에 레이팅순 4인 포드 편성. 주 1회 무료 도전으로 나보다 최대 300점 위 선수를 지목해요. 기록은 마감 전까지 비공개.</p></div>
+    <div><b>예선 포인트</b><p>포드 승률 + 전체 백분위 = 예선 포인트. 2주 합산 상위 14명과 업셋 와일드카드 2명이 16강에 올라요. 미제출은 3패 처리.</p></div>
+    <div><b>AI 심판 → 상대 검토 → 관리자</b><p>폰에서 17개 관절을 추적해 렙을 셉니다. 측면·전신·모니터·오늘의 코드가 보이게 찍고, YouTube 일부공개 링크로 제출해요.</p></div>
   </div>
-  <p class="foot">YOU vs WHO는 대학 프로젝트로 설계된 서비스예요. 결제는 데모이며 실제 금액이 청구되지 않아요. 실제 돈을 거는 베팅은 없고, 포인트로만 하는 예측 리그를 운영해요.</p>`;
+
+  <footer class="footer">
+    <div><b>대회</b><a href="#/wod">이번 주 WOD</a><a href="#/rank">랭킹</a><a href="#/bracket">본선 대진</a></div>
+    <div><b>커뮤니티</b><a href="#/community">피드</a><a href="#/bracket">예측 리그</a></div>
+    <div><b>선수</b><a href="#/me">내 정보</a><a href="#/wod">기록 제출</a></div>
+    <div><b>박스</b><span>결승 개최 박스 모집 중</span></div>
+  </footer>
+  <p class="fine">YOU vs WHO는 대학 프로젝트로 설계된 서비스예요. 결제는 데모이며 실제 금액이 청구되지 않아요. 실제 돈을 거는 베팅은 없고, 포인트로만 하는 예측 리그를 운영해요.</p>`;
   $("#replay").onclick = () => window.YVWINTRO && window.YVWINTRO.play({ force: true });
   const cj = $("#ctaJoin"); if (cj) cj.onclick = () => authModal("join");
 }
