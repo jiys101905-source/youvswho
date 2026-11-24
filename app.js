@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611221219";
+import { AIJudge } from "./aijudge.js?v=202611241102";
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -31,7 +31,7 @@ const STAGES = [
   { key: "W2", name: "WHO'S NEXT 2", kind: "qual", when: "2주차" },
   { key: "R16", name: "16강", kind: "video", when: "3주차" },
   { key: "QF", name: "8강", kind: "video", when: "3주차" },
-  { key: "FINAL", name: "THE FINAL", kind: "final", when: "4주차 주말" },
+  { key: "FINAL", name: "THE FINAL", kind: "final", when: "4주차 토요일" },
 ];
 // 4 weeks: W1, W2, week 3 = 16강 + 8강, week 4 weekend = THE FINAL
 const WEEKS = [
@@ -45,7 +45,7 @@ function sched(id) {
   const [y, m] = id.split("-").map(Number);
   const D = (n, h = 0, mi = 0) => new Date(y, m - 1, 1 + n, h, mi);
   let sat = D(22); while (sat.getDay() !== 6) sat.setDate(sat.getDate() + 1);
-  const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+  const sun = new Date(sat.getFullYear(), sat.getMonth(), sat.getDate(), 23, 59);   // final is one day
   return {
     W1: { open: D(0), close: D(6, 23, 59) },
     W2: { open: D(7), close: D(13, 23, 59) },
@@ -131,13 +131,13 @@ function defaultSeason(id) {
     status: { W1: "reg", W2: "wait", R16: "wait", QF: "wait", FINAL: "wait" },
     dates: { W1: d(0), W2: d(7), R16: d(14), QF: d(17), FINAL: ymd(sched(id).FINAL.sat) },
     wods: {
-      W1: { title: "WHO'S NEXT 1", scoring: "time", cap: 12, desc: "For time · Time cap 12:00\n21-15-9\nCalorie row\nToes-to-bar\nAlternating dumbbell snatch 22.5/15kg\n\n캡에 걸리면 남은 렙 수만큼 초가 더해져요.", move: "generic" },
-      W2: { title: "WHO'S NEXT 2", scoring: "reps", unit: "reps", cap: 13, desc: "AMRAP 13:00\n5 Chest-to-bar pull-ups\n10 Wall-ball shots 9/6kg\n15 Double-unders\n\n총 렙 수로 기록해요.", move: "generic" },
-      R16: { title: "16강", scoring: "time", cap: 14, desc: "4 Rounds for time · Time cap 14:00\n12 Thrusters 43/29kg\n9 Bar-facing burpees\n6 Bar muscle-ups", move: "generic" },
-      QF: { title: "8강", scoring: "time", cap: 15, desc: "For time · Time cap 15:00\n30 Cal Assault bike\n20 Overhead squats 61/43kg\n10 Ring muscle-ups\n20 Overhead squats 61/43kg\n30 Cal Assault bike", move: "generic" },
-      FINAL: { title: "THE FINAL", scoring: "time", cap: 12, desc: "1:1 Lane · Time cap 12:00\n3 Rounds for time\n15 Cal Assault bike\n5 Ring muscle-ups\n5 Power snatches 84/57kg (185/125 lb)", move: "generic" },
+      W1: { title: "WHO'S NEXT 1", scoring: "reps", unit: "reps", cap: 12, desc: "AMRAP 12:00\n10 Calorie row\n10 Toes-to-bar\n10 Alternating dumbbell snatches (22.5 / 15kg)\n\n기록: 총 렙 수 · 동점이면 마지막 라운드를 끝낸 시각", move: "generic" },
+      W2: { title: "WHO'S NEXT 2", scoring: "time", cap: 13, desc: "3 Rounds for time · Time cap 13:00\n40 Double-unders\n12 Power cleans (70 / 48kg)\n9 Chest-to-bar pull-ups\n\n캡에 걸리면 남은 렙 1개당 1초 추가", move: "generic" },
+      R16: { title: "16강", scoring: "time", cap: 14, desc: "4 Rounds for time · Time cap 14:00\n12 Thrusters (43 / 29kg)\n9 Bar-facing burpees\n6 Bar muscle-ups", move: "generic" },
+      QF: { title: "8강", scoring: "time", cap: 14, desc: "3 Rounds for time · Time cap 14:00\n15 Overhead squats (61 / 43kg)\n10 Handstand push-ups\n12 Box jump-overs (24 / 20in)", move: "generic" },
+      FINAL: { title: "THE FINAL", scoring: "time", cap: 12, desc: "Event 1 · 준결승 13:00\n4 Rounds for time · Time cap 10:00\n8 Deadlifts (143 / 102kg)\n12 Burpee box jump-overs (24 / 20in)\n2 Rope climbs (4.5m)\n\nEvent 2 · 3·4위전 16:00 · 결승 16:40\n3 Rounds for time · Time cap 12:00\n20 Calorie assault bike (여 15)\n7 Ring muscle-ups\n5 Touch-and-go power snatches (84 / 57kg)", move: "generic" },
     },
-    final: { box: "개최 박스 모집 중", addr: "", time: "토 13:00", stream: "", sponsors: 0, note: "준결승 → 3·4위전 → 결승" },
+    final: { box: "개최 박스 모집 중", addr: "", time: "13:00", stream: "", sponsors: 0, note: "준결승 13:00 → 3·4위전 16:00 → 결승 16:40" },
     bracket: {},
     createdAt: serverTimestamp(),
   };
@@ -261,7 +261,7 @@ async function home() {
   const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0 }));
   const ne = nextEvent(S.seasonId);
   const wkNow = WEEKS.findIndex((w) => w.keys.some((k) => T[k].open <= now && now <= (T[k].close || T[k].sun)));
-  const range = (w) => { const a = T[w.keys[0]].open, z = T[w.keys[w.keys.length - 1]]; return w.n === 4 ? `${md(z.sat)}–${md(z.sun)}` : `${md(a)}–${md(z.close)}`; };
+  const range = (w) => { const a = T[w.keys[0]].open, z = T[w.keys[w.keys.length - 1]]; return w.n === 4 ? `${md(z.sat)} (토)` : `${md(a)}–${md(z.close)}`; };
   const prize = (k) => P.pool > 0 ? won((P.pool / 2) * RULE.split[k]) : pct(RULE.split[k]);
   view.innerHTML = `
   <section class="slider" id="slider" aria-roledescription="carousel">
@@ -292,7 +292,7 @@ async function home() {
   <div class="sec"><h2>${esc(s.title)}</h2></div>
   <div class="stages">${WEEKS.map((w, i) => `
     <a class="stage ${i === wkNow ? "now" : ""}" href="#/schedule">
-      <span>${w.n}주차${w.n === 4 ? " 주말" : ""}</span><b>${w.name}</b><span>${range(w)}</span>
+      <span>${w.n}주차${w.n === 4 ? " 토요일" : ""}</span><b>${w.name}</b><span>${range(w)}</span>
     </a>`).join("")}
   </div>
 
@@ -332,7 +332,7 @@ async function about() {
     <section><h2>한 달, 네 주</h2>
       <ul><li><b>1·2주차 WHO'S NEXT</b>온라인 예선. 주차 첫날 0시에 WOD 공개, 7일째 23:59 마감.</li>
       <li><b>3주차 16강 · 8강</b>영상 본선. 3주차 앞 3일은 16강, 뒤 4일은 8강.</li>
-      <li><b>4주차 주말 THE FINAL</b>오프라인 박스 결승. WOD는 4주차가 시작될 때 공개돼서 한 번 시도해 보고 나올 수 있어요.</li></ul></section>
+      <li><b>4주차 토요일 THE FINAL</b>오프라인 박스 결승. 하루에 준결승, 3·4위전, 결승을 치러요. WOD는 4주차가 시작될 때 공개돼서 한 번 시도해 보고 나올 수 있어요.</li></ul></section>
     <section><h2>포드 & 도전</h2><p>접수가 마감되면 레이팅이 비슷한 4명이 한 포드로 묶여요. 주 1회, 나보다 최대 300점 위 선수에게 무료로 도전할 수 있어요. 기록은 마감 전까지 비공개예요.</p></section>
     <section><h2>예선 포인트</h2><p>포드 승률과 전체 백분위를 합쳐 예선 포인트가 돼요. 2주 합산 상위 14명과 업셋 와일드카드 2명이 16강에 올라요. 미제출은 3패로 처리돼요.</p></section>
     <section><h2>레이팅</h2><p>모든 선수는 1500에서 시작해요. 이기면 오르고 지면 내려가요. 위로 도전해서 이기면 업셋 점수가 쌓이고, 업셋이 쌓이면 챔피언에게 도전할 수 있어요.</p></section>
@@ -374,7 +374,7 @@ async function wod() {
   const dl = (k) => { const t = T[k], I = INFO[k], ww = s.wods[k] || {};
     const score = ww.scoring === "time" ? "시간 (빠를수록 좋음)" : "렙 수 (많을수록 좋음)";
     return `<dl class="wk-dl">${k === "FINAL"
-      ? row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("준결승", `${mdw(t.sat)} ${esc(s.final.time)}`) + row("3·4위전 · 결승", `${mdw(t.sun)} 13:00`) + row("장소", esc(s.final.box)) + row("방식", I.fmt) + row("출전", I.who) + row("판정", I.rec) + row("시상", I.next)
+      ? row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("날짜", mdw(t.sat)) + row("준결승", "13:00 · Event 1") + row("3·4위전", "16:00 · Event 2") + row("결승", "16:40 · Event 2") + row("장소", esc(s.final.box)) + row("방식", I.fmt) + row("출전", I.who) + row("판정", I.rec) + row("시상", I.next)
       : row("기간", `${mdw(t.open)} – ${mdw(t.close)}`) + row("WOD 공개", `${mdw(t.open)} ${hm(t.open)}`) + row("기록 마감", `${mdw(t.close)} ${hm(t.close)}`) + row("결과 발표", `${mdw(res12(t.close))} 12:00`) + row("방식", I.fmt) + row("출전", I.who) + row("기록", `${score} · 타임캡 ${ww.cap}분`) + row("제출", I.rec) + row("다음 단계", I.next)}</dl>`; };
   const stateOf = (k) => { const t = T[k], end = t.close || t.sun; return now < t.open ? "soon" : now <= end ? "live" : "done"; };
   const panel = (k) => {
@@ -390,10 +390,10 @@ async function wod() {
     <div class="ph"><h1 class="pagehead">Schedule</h1><span class="ph-ko">일정 · ${esc(s.title)}</span></div>
     ${ne ? `<div class="sch-next"><span>${esc(ne[1])}</span><b data-cd="${+ne[0]}">${cdText(ne[0])}</b></div>` : ""}
   </section>
-  <ol class="sch-bar">${WEEKS.map((wk) => { const st = stateOf(wk.keys[wk.keys.length - 1]), st0 = stateOf(wk.keys[0]); const cls = st0 === "soon" ? "soon" : st === "done" ? "done" : "live"; return `<li class="${cls}"><a href="#wk${wk.n}"><span>${wk.n}주차${wk.n === 4 ? " 주말" : ""}</span><b>${wk.name}</b><em>${lbl[cls]}</em></a></li>`; }).join("")}</ol>
+  <ol class="sch-bar">${WEEKS.map((wk) => { const st = stateOf(wk.keys[wk.keys.length - 1]), st0 = stateOf(wk.keys[0]); const cls = st0 === "soon" ? "soon" : st === "done" ? "done" : "live"; return `<li class="${cls}"><a href="#wk${wk.n}"><span>${wk.n}주차${wk.n === 4 ? " 토요일" : ""}</span><b>${wk.name}</b><em>${lbl[cls]}</em></a></li>`; }).join("")}</ol>
   ${WEEKS.map((wk) => `
   <section class="wk" id="wk${wk.n}">
-    <div class="wk-hero"><img src="${wk.img}" alt=""><div class="in"><span>${String(wk.n).padStart(2, "0")} · ${wk.n}주차${wk.n === 4 ? " 주말" : ""} · ${wk.ko}</span><h2>${wk.name}</h2></div></div>
+    <div class="wk-hero"><img src="${wk.img}" alt=""><div class="in"><span>${String(wk.n).padStart(2, "0")} · ${wk.n}주차${wk.n === 4 ? " 토요일" : ""} · ${wk.ko}</span><h2>${wk.name}</h2></div></div>
     ${wk.keys.map((k) => `
     <div class="wk-body">
       <div class="wk-info">${wk.keys.length > 1 ? `<h3>${STAGES[stageIdx(k)].name}<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>` : `<h3>세부 일정<em class="st ${stateOf(k)}">${lbl[stateOf(k)]}</em></h3>`}${dl(k)}</div>
@@ -559,7 +559,7 @@ async function bracket(arg) {
   <div class="row wrap"><div class="ph"><h1 class="pagehead">Bracket</h1><span class="ph-ko">본선 대진</span></div><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/bracket/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/bracket/F'">여자</button></div></div>
   <div class="card bkwrap"><div class="bk">${col("R16", 8, "16강")}${col("QF", 4, "8강")}${col("SF", 2, "준결승")}<div class="col"><h4>결승 · 3·4위전</h4>${(b.F || [[null, null, null]]).map(mt).join("")}${(b.P3 || [[null, null, null]]).map(mt).join("")}</div></div></div>
   <div class="grid g2" style="margin-top:8px">
-    <div class="card"><h3>THE FINAL</h3><p style="font-size:24px;font-weight:500;margin:0">${esc(S.season.final.box)}</p><p class="muted" style="font-weight:500">준결승 ${mdw(sched(S.seasonId).FINAL.sat)} ${esc(S.season.final.time)} · 결승 ${mdw(sched(S.seasonId).FINAL.sun)} 13:00</p><p class="muted">${esc(S.season.final.addr || "")}</p>${S.season.final.stream ? `<a class="btn red" href="${esc(S.season.final.stream)}" target="_blank" rel="noopener">무료 라이브</a>` : ""}</div>
+    <div class="card"><h3>THE FINAL</h3><p style="font-size:24px;font-weight:500;margin:0">${esc(S.season.final.box)}</p><p class="muted" style="font-weight:500">${mdw(sched(S.seasonId).FINAL.sat)} · 준결승 13:00 · 3·4위전 16:00 · 결승 16:40</p><p class="muted">${esc(S.season.final.addr || "")}</p>${S.season.final.stream ? `<a class="btn red" href="${esc(S.season.final.stream)}" target="_blank" rel="noopener">무료 라이브</a>` : ""}</div>
     <div class="card"><h3>예측 리그 <span class="pill">포인트 전용</span></h3><div id="predBox"></div></div>
   </div>`;
   // predictions on open matches
@@ -969,7 +969,7 @@ async function startTicker() {
     const ne = nextEvent(S.seasonId);
     return [
       `현재 상금 <b>${won(P.pool)}</b>`,
-      `THE FINAL <b>${mdw(T.FINAL.sat)} – ${mdw(T.FINAL.sun)}</b>`,
+      `THE FINAL <b>${mdw(T.FINAL.sat)}</b>`,
       `${esc(S.season.title)} 참가 선수 <b>${P.users.toLocaleString("ko-KR")}명</b>`,
       ne ? `${esc(ne[1])} <b data-tkcd="${+ne[0]}">${cdText(ne[0])}</b>` : null,
     ].filter(Boolean);
