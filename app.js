@@ -3,7 +3,15 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, writeBatch, getCountFromServer, increment, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { AIJudge } from "./aijudge.js?v=202611241102";
+import { DEMO, DEMO_SEASON, DEMO_T0 } from "./demo.js?v=202611271801";
+import { AIJudge } from "./aijudge.js?v=202611271801";
+
+// Presentation demo: a fictional season frozen at "8강 진행 중". ?demo=0 turns it off (remembered), ?demo=1 back on.
+const _dq = new URLSearchParams(location.search).get("demo");
+try { if (_dq === "0" || _dq === "1") localStorage.setItem("yvw_demo", _dq); } catch (e) { }
+const DEMO_ON = (() => { try { return localStorage.getItem("yvw_demo") !== "0"; } catch (e) { return true; } })();
+const _LOAD = Date.now();
+const NOW = () => (DEMO_ON ? new Date(DEMO_T0.getTime() + (Date.now() - _LOAD)) : new Date());
 
 const fb = initializeApp({
   apiKey: "AIzaSyCF7gkbqOkLVTYYMZKZjdK7fK6sSK4Ail0",
@@ -58,7 +66,7 @@ const md = (d) => `${d.getMonth() + 1}.${d.getDate()}`;
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const mdw = (d) => `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
 const hm = (d) => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
-function nextEvent(id, now = new Date()) {
+function nextEvent(id, now = NOW()) {
   const T = sched(id);
   const ev = [
     [T.W1.open, "1주차 WOD 공개까지"], [T.W1.close, "1주차 마감까지"],
@@ -70,7 +78,7 @@ function nextEvent(id, now = new Date()) {
   return ev.find((e) => e[0] > now) || null;
 }
 function cdText(t) {
-  let s = Math.max(0, Math.floor((t - Date.now()) / 1000));
+  let s = Math.max(0, Math.floor((t - NOW().getTime()) / 1000));
   const d = Math.floor(s / 86400); s -= d * 86400;
   const h = Math.floor(s / 3600); s -= h * 3600;
   const m = Math.floor(s / 60); s -= m * 60;
@@ -212,6 +220,7 @@ async function loadSeason() {
   S.seasonId = id;
   const sd = await getDoc(doc(db, "seasons", id));
   S.season = sd.exists() ? sd.data() : { ...defaultSeason(id), _virtual: true };
+  if (DEMO_ON) { S.seasonId = DEMO_SEASON; S.season = DEMO.season(defaultSeason(DEMO_SEASON)); }
 }
 async function loadMe() {
   if (!S.user) { S.me = null; S.admin = false; return; }
@@ -223,9 +232,15 @@ async function loadMe() {
 }
 async function usersBy(gender) {
   const qs = await getDocs(query(collection(db, "users"), where("gender", "==", gender)));
-  return qs.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const real = qs.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => !u.bot);
+  return DEMO_ON ? [...real, ...DEMO.users(gender)] : real;
 }
 async function poolNumbers() {
+  if (DEMO_ON) {
+    const { users, pro, viewer, boxes, boost } = DEMO.counts, sponsors = S.season?.final?.sponsors || 0;
+    const revenue = pro * RULE.pro + viewer * RULE.viewer + boxes * RULE.box;
+    return { pro, viewer, boxes, users, boost, sponsors, revenue, pool: revenue * RULE.poolShare + boost + sponsors };
+  }
   const c = async (q) => (await getCountFromServer(q)).data().count;
   const [pro, viewer, boxes, users] = await Promise.all([
     c(query(collection(db, "users"), where("pro", "==", true))),
@@ -257,7 +272,7 @@ window.addEventListener("hashchange", route);
 /* ---------------- HOME ---------------- */
 async function home() {
   await loadMe();
-  const s = S.season, T = sched(S.seasonId), now = new Date();
+  const s = S.season, T = sched(S.seasonId), now = NOW();
   const P = await poolNumbers().catch(() => ({ pool: 0, users: 0, pro: 0 }));
   const ne = nextEvent(S.seasonId);
   const wkNow = WEEKS.findIndex((w) => w.keys.some((k) => T[k].open <= now && now <= (T[k].close || T[k].sun)));
@@ -359,9 +374,11 @@ async function wod() {
     if (entry?.podId) { const p = await safeData(doc(db, "pods", entry.podId)); pod = p ? { id: entry.podId, ...p } : null; }
   }
   res = await safeData(doc(db, "results", stKey));
+  let resLabel = st.name;
+  if (!res && DEMO_ON) { res = DEMO.results("W2"); resLabel = "WHO'S NEXT 2"; }
   const statusLabel = { reg: "참가 접수 중 (일요일 마감)", live: "진행 중 · 기록 제출 가능", closed: "마감 · 결과 공개", wait: "준비 중" }[status] || status;
   const code = dailyCode();
-  const T = sched(S.seasonId), now = new Date();
+  const T = sched(S.seasonId), now = NOW();
   const res12 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 12);   // 결과 발표: 마감 다음 날 12:00
   const INFO = {
     W1: { fmt: "온라인 예선 · 4인 포드", who: "누구나 · 무료", rec: "영상 제출 + 기록 입력", next: "2주 합산 예선 포인트로 16강 결정" },
@@ -439,7 +456,7 @@ async function wod() {
     $("#podBox").innerHTML = `<div class="sec"><h2>내 포드 · ${esc(pod.label || pod.id.split("_").pop())}</h2><small>${status === "closed" ? "결과 공개" : "기록은 마감 전까지 비공개"}</small></div>
     <div class="pod">${mates.sort((a, b) => b.rating - a.rating).map((u) => { const r = rrow(u); return `<a class="pm" href="#/u/${u.id}"><div class="av">${initial(u.name)}</div><div class="sp"><b>${esc(u.name)}</b>${badgeFor(u)}<div class="dim" style="font-size:12px">${esc(u.box || "")}</div></div><span class="num">${Math.round(u.rating)}</span>${r ? `<span class="pill ${r.podW > r.podL ? "green" : ""}">${r.score} · ${r.podW}승 ${r.podL}패</span>` : u.id === S.user?.uid ? `<span class="pill blue">나</span>` : `<span class="pill">🔒</span>`}</a>`; }).join("")}</div>`;
   }
-  if (res) renderResults(res, w);
+  if (res) renderResults(res, w, resLabel);
 }
 function dailyCode() { const d = new Date(); const n = (d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) * 7919 % 9000 + 1000; return "YW-" + n; }
 function submitPanel(w, sub, status, ch) {
@@ -496,12 +513,12 @@ async function challengeModal(stKey) {
     closeModal(); toast(u.name + "에게 도전장을 보냈어요!"); route();
   })));
 }
-function renderResults(res, w) {
+function renderResults(res, w, label = "") {
   const box = $("#resBox");
   const rows = res.rows || [];
   const byG = { M: rows.filter((r) => r.gender === "M"), F: rows.filter((r) => r.gender === "F") };
   const tbl = (arr) => arr.length ? `<table><tr><th>#</th><th>선수</th><th>기록</th><th class="r">포드</th><th class="r">백분위</th><th class="r">예선P</th><th class="r">레이팅</th></tr>${arr.map((r, i) => `<tr class="${r.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${r.uid}">${esc(r.name)}</a>${r.upset ? ` <span class="pill red">UPSET</span>` : ""}${r.flag ? ` <span class="pill gold">검토</span>` : ""}</td><td class="mono">${esc(r.score)}</td><td class="r mono">${r.podW}-${r.podL}</td><td class="r mono">${pct(r.pct)}</td><td class="r mono">${r.qp.toFixed(1)}</td><td class="r mono">${r.dr >= 0 ? "+" : ""}${Math.round(r.dr)}</td></tr>`).join("")}</table>` : `<div class="empty">결과 없음</div>`;
-  box.innerHTML = `<div class="sec"><h2>전체 결과</h2><small>영상은 상대 검토 후 관리자 확정</small></div><div class="grid g2"><div class="card"><h3>남자</h3>${tbl(byG.M)}</div><div class="card"><h3>여자</h3>${tbl(byG.F)}</div></div>`;
+  box.innerHTML = `<div class="sec"><h2>${label ? esc(label) + " 결과" : "전체 결과"}</h2></div><div class="grid g2"><div class="card"><h3>남자</h3>${tbl(byG.M)}</div><div class="card"><h3>여자</h3>${tbl(byG.F)}</div></div>`;
 }
 
 /* ---------------- AI judge modal ---------------- */
@@ -528,7 +545,7 @@ async function rank(arg) {
   const g = arg === "F" ? "F" : (arg === "M" ? "M" : S.me?.gender || "M");
   const users = (await usersBy(g)).sort((a, b) => b.rating - a.rating);
   const stq = await getDocs(query(collection(db, "standings"), where("season", "==", S.seasonId), where("gender", "==", g)));
-  const st = stq.docs.map((d) => d.data()).sort((a, b) => b.qp - a.qp);
+  const st = (DEMO_ON ? DEMO.standings(g) : stq.docs.map((d) => d.data())).slice().sort((a, b) => b.qp - a.qp);
   const field = st.length;
   const top14 = new Set(st.slice(0, RULE.qualifiers).map((x) => x.uid));
   const wc = st.filter((x) => !top14.has(x.uid) && x.pctAvg >= 1 - RULE.wildcardPct).sort((a, b) => b.upsetScore - a.upsetScore).slice(0, RULE.wildcards);
@@ -537,7 +554,7 @@ async function rank(arg) {
   <div class="row wrap"><div class="ph"><h1 class="pagehead">Ranking</h1><span class="ph-ko">랭킹</span></div><span class="sp"></span><div class="seg"><button class="${g === "M" ? "on" : ""}" onclick="location.hash='#/rank/M'">남자</button><button class="${g === "F" ? "on" : ""}" onclick="location.hash='#/rank/F'">여자</button></div></div>
   <div class="grid g2">
     <div class="card"><h3>예선 포인트 · ${esc(S.season.title)} <span class="pill">${field}명</span></h3>
-      ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${Math.round(x.upsetScore || 0)}</td><td class="r">${!x.pro && (top14.has(x.uid) || wcs.has(x.uid)) ? `<span class="pill">Pro 필요</span>` : top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
+      ${st.length ? `<table><tr><th>#</th><th>선수</th><th class="r">예선P</th><th class="r">업셋점수</th><th></th></tr>${st.map((x, i) => `<tr class="${x.uid === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${x.uid}">${esc(x.name)}</a></td><td class="r mono">${x.qp.toFixed(1)}</td><td class="r mono">${x.upsetScore ? Math.round(x.upsetScore) : "–"}</td><td class="r">${!x.pro && (top14.has(x.uid) || wcs.has(x.uid)) ? `<span class="pill">Pro 필요</span>` : top14.has(x.uid) ? `<span class="pill green">진출권</span>` : wcs.has(x.uid) ? `<span class="pill gold">와일드카드</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">아직 마감된 예선 주차가 없어요.</div>`}
     </div>
     <div class="card"><h3>레이팅 (통산)</h3>
       ${users.length ? `<table><tr><th>#</th><th>선수</th><th>박스</th><th class="r">레이팅</th></tr>${users.slice(0, 100).map((u, i) => `<tr class="${u.id === S.user?.uid ? "me" : ""}"><td class="rk">${i + 1}</td><td><a href="#/u/${u.id}">${esc(u.name)}</a>${badgeFor(u)}</td><td class="dim">${esc(u.box || "")}</td><td class="r mono">${Math.round(u.rating)}</td></tr>`).join("")}</table>` : `<div class="empty">아직 선수가 없어요.</div>`}
@@ -583,12 +600,14 @@ async function community() {
   const pf = $("#pf");
   if (pf) pf.onsubmit = (e) => { e.preventDefault(); guard(async () => { await addDoc(collection(db, "feed"), { uid: S.user.uid, name: S.me?.name || "선수", text: pf.t.value.trim().slice(0, 500), at: serverTimestamp() }); pf.reset(); }); };
   S.unsub.push(onSnapshot(query(collection(db, "feed"), orderBy("at", "desc"), limit(50)), (qs) => {
-    $("#feed").innerHTML = qs.empty ? `<div class="empty">첫 글을 남겨 보세요.</div>` : qs.docs.map((d) => { const p = d.data(); return `<div class="post"><div class="meta"><a href="#/u/${p.uid}"><b style="color:var(--ink)">${esc(p.name)}</b></a> · ${p.at ? new Date(p.at.seconds * 1000).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "방금"} ${p.uid === S.user?.uid || S.admin ? `<a href="#" data-del="${d.id}" class="dim">삭제</a>` : ""}</div><p>${esc(p.text)}</p></div>`; }).join("");
+    // real posts first (newest), then the demo season's posts
+    const posts = [...qs.docs.map((d) => ({ id: d.id, ...d.data() })), ...(DEMO_ON ? DEMO.feed : [])];
+    $("#feed").innerHTML = !posts.length ? `<div class="empty">첫 글을 남겨 보세요.</div>` : posts.map((p) => { const d = { id: p.id }; return `<div class="post"><div class="meta">${String(p.uid).startsWith("fan") ? `<b style="color:var(--ink)">${esc(p.name)}</b>` : `<a href="#/u/${p.uid}"><b style="color:var(--ink)">${esc(p.name)}</b></a>`} · ${p.at ? new Date(p.at.seconds * 1000).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "방금"} ${!String(p.id).startsWith("dfeed") && (p.uid === S.user?.uid || S.admin) ? `<a href="#" data-del="${d.id}" class="dim">삭제</a>` : ""}</div><p>${esc(p.text)}</p></div>`; }).join("");
     document.querySelectorAll("[data-del]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); guard(() => deleteDoc(doc(db, "feed", a.dataset.del))); }));
   }));
   // prediction leaderboard
   const ps = await getDocs(query(collection(db, "predictions"), where("season", "==", S.seasonId)));
-  const scores = ps.docs.map((d) => { const p = d.data(); return { name: p.name, uid: p.uid, pts: predPoints(p.picks || {}) }; }).sort((a, b) => b.pts - a.pts);
+  const scores = [...ps.docs.map((d) => { const p = d.data(); return { name: p.name, uid: p.uid, pts: predPoints(p.picks || {}) }; }), ...(DEMO_ON ? DEMO.predictions : [])].sort((a, b) => b.pts - a.pts);
   $("#plb").innerHTML = scores.length ? `<table>${scores.slice(0, 20).map((s, i) => `<tr><td class="rk">${i + 1}</td><td>${esc(s.name)}</td><td class="r mono">${s.pts}점</td></tr>`).join("")}</table>` : `<div class="empty">아직 예측이 없어요.</div>`;
 }
 function predPoints(picks) {
@@ -599,7 +618,7 @@ function predPoints(picks) {
 
 /* ---------------- ME ---------------- */
 async function mePage(arg) {
-  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div><div class="sec"><h2>더 보기</h2></div><div class="grid g2"><a class="card" href="#/community"><h3>커뮤니티</h3></a><a class="card" href="#/about"><h3>About</h3></a></div>`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
+  if (!S.user) { view.innerHTML = `<div class="card"><h3>내 정보</h3><p class="muted">로그인하면 레이팅·구독·기록을 관리할 수 있어요.</p><div class="row"><button class="btn red" id="a1">로그인</button><button class="btn ghost" id="a2">가입</button></div></div><div class="sec"><h2>더 보기</h2></div><div class="grid g2"><a class="card" href="#/community"><h3>커뮤니티</h3></a><a class="card" href="#/about"><h3>About</h3></a></div>${demoCard()}`; $("#a1").onclick = () => authModal("login"); $("#a2").onclick = () => authModal("join"); return; }
   await loadMe(); renderWho();
   const m = S.me || {};
   if (!S.me && S.user) { view.innerHTML = `<div class="card"><p class="muted">프로필을 불러오지 못했어요.</p><button class="btn ghost" id="lo">로그아웃</button></div>`; $("#lo").onclick = logout; return; }
@@ -619,7 +638,7 @@ async function mePage(arg) {
   <div class="sec"><h2>프로필 수정</h2></div>
   <form class="card" id="pfm"><div class="grid g2"><div><label>선수 이름</label><input name="name" value="${esc(m.name)}" maxlength="20"></div><div><label>소속 박스</label><input name="box" value="${esc(m.box || "")}" maxlength="30"></div></div><button class="btn ghost" style="margin-top:12px">저장</button></form>
 
-  <div class="row wrap" style="margin-top:24px">${!S.adminsExist && arg === "admin" ? `<button class="btn ghost" id="claim">관리자 등록</button>` : ""}<span class="sp"></span><button class="btn ghost" id="lo">로그아웃</button></div>`;
+  <div class="row wrap" style="margin-top:24px">${!S.adminsExist && arg === "admin" ? `<button class="btn ghost" id="claim">관리자 등록</button>` : ""}<span class="sp"></span><button class="btn ghost" id="lo">로그아웃</button></div>${demoCard()}`;
   $("#lo").onclick = logout;
   const cl = $("#claim"); if (cl) cl.onclick = () => guard(async () => { await setDoc(doc(db, "config", "admins"), { uids: [S.user.uid], at: serverTimestamp() }); toast("관리자로 등록됐어요"); await loadMe(); renderWho(); route(); });
   $("#pfm").onsubmit = (e) => { e.preventDefault(); guard(async () => { await updateDoc(doc(db, "users", S.user.uid), { name: e.target.name.value.trim(), box: e.target.box.value.trim() }); await loadMe(); toast("저장했어요"); route(); }); };
@@ -635,10 +654,11 @@ function payModal(kind) {
 
 /* ---------------- ATHLETE PAGE ---------------- */
 async function athletePage(uid) {
-  const d = await getDoc(doc(db, "users", uid)); if (!d.exists()) { view.innerHTML = `<div class="empty">선수를 찾을 수 없어요.</div>`; return; }
-  const u = d.data();
+  const du = DEMO_ON ? DEMO.user(uid) : null;
+  const d = du ? null : await getDoc(doc(db, "users", uid)); if (!du && !d.exists()) { view.innerHTML = `<div class="empty">선수를 찾을 수 없어요.</div>`; return; }
+  const u = du || d.data();
   const bs = await getDocs(query(collection(db, "boosts"), where("to", "==", uid)));
-  let sum = 0; bs.forEach((x) => (sum += x.data().amount || 0));
+  let sum = du ? DEMO.boosts(uid) : 0; bs.forEach((x) => (sum += x.data().amount || 0));
   view.innerHTML = `<div class="card"><div class="row wrap"><div class="av lg">${initial(u.name)}</div><div><h2 style="font-size:26px">${esc(u.name)}${badgeFor(u)}</h2><div class="muted">${G[u.gender]} · ${esc(u.box || "소속 없음")}</div></div></div>
   <div class="grid g4" style="margin-top:16px"><div class="stat"><b>${Math.round(u.rating)}</b><span>레이팅</span></div><div class="stat"><b>${u.wins || 0}-${u.losses || 0}</b><span>포드 전적</span></div><div class="stat"><b>${u.upsets || 0}</b><span>업셋</span></div><div class="stat"><b>${won(sum)}</b><span>팬 부스트 누적</span></div></div></div>
   <div class="card cta" style="margin-top:14px"><h3>팬 부스트</h3><p class="muted" style="margin-top:0">응원하는 선수의 상금에 직접 더해져요 (데모 결제).</p><div class="row wrap">${[1000, 5000, 10000].map((a) => `<button class="btn ghost" data-b="${a}">${won(a)}</button>`).join("")}</div></div>`;
@@ -949,6 +969,19 @@ async function wipeDemo() {
   const qs = await getDocs(query(collection(db, "users"), where("bot", "==", true)));
   const batch = writeBatch(db); qs.forEach((d) => batch.delete(d.ref)); await batch.commit(); toast(`가상 선수 ${qs.size}명 삭제`); route();
 }
+
+/* ---------------- demo season switch (MY page) ---------------- */
+function demoCard() {
+  return `<div class="card demo-card" style="margin-top:8px"><h3>발표용 데모 시즌 <span class="pill">${DEMO_ON ? "켜짐" : "꺼짐"}</span></h3>
+  <p class="muted" style="margin:0 0 16px;font-size:14px">가상의 선수·기록·대진으로 시즌이 8강까지 진행된 모습을 보여 줘요. 실제 데이터에는 저장되지 않아요.</p>
+  <button class="btn ${DEMO_ON ? "ghost" : "red"} sm" data-demo="${DEMO_ON ? "0" : "1"}">${DEMO_ON ? "데모 끄기" : "데모 켜기"}</button></div>`;
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-demo]"); if (!b) return;
+  try { localStorage.setItem("yvw_demo", b.dataset.demo); } catch (x) { }
+  location.href = location.pathname + "#/";
+  location.reload();
+});
 
 /* ---------------- logout: back to the intro ---------------- */
 async function logout() {
